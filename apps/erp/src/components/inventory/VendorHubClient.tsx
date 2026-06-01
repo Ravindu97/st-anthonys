@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { formatLkr } from '@/lib/format';
 import { VendorHubTable, type VendorHubRow } from './VendorHubTable';
 
 export function VendorHubClient({
@@ -35,33 +36,44 @@ export function VendorHubClient({
     });
   }, [vendors, query, sort]);
 
+  const portfolioTotal = Number(totalValue ?? 0);
+
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-display text-base font-semibold text-slate-900">
-          Vendors
-          <span className="ml-2 font-mono text-sm font-normal text-slate-400">
-            {filtered.length}
-            {query ? ` / ${vendors.length}` : ''}
-          </span>
-        </h2>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-semibold text-slate-900">
+            Vendors
+          </h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {filtered.length === vendors.length
+              ? `${vendors.length} active locations`
+              : `${filtered.length} of ${vendors.length} shown`}
+            {portfolioTotal > 0 && (
+              <span className="text-slate-400">
+                {' '}
+                · Portfolio {formatLkr(portfolioTotal)}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
           <input
             type="search"
             placeholder="Search name, code, location…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-blue-500 focus:ring-2 focus:ring-brand-blue-100 focus:outline-none sm:w-64"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-100 focus:outline-none"
           />
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm sm:w-40"
             aria-label="Sort vendors"
           >
-            <option value="value">Stock value</option>
-            <option value="alerts">Alerts</option>
-            <option value="name">Name</option>
+            <option value="value">Sort: stock value</option>
+            <option value="alerts">Sort: alerts</option>
+            <option value="name">Sort: name</option>
           </select>
         </div>
       </div>

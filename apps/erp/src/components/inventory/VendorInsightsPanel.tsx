@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
 import { InsightLink } from '@/components/InsightLink';
-import { vendorInventoryUrl } from '@/lib/inventory-url';
+import { vendorAlertItemUrl, vendorInventoryUrl } from '@/lib/inventory-url';
 
 type Pareto = {
   limit: number;
@@ -198,13 +198,25 @@ export function VendorInsightsPanel({
                 </tr>
               </thead>
               <tbody>
-                {watchlist.map((row, i) => (
-                  <tr key={i} className="border-b border-slate-50">
-                    <td className="py-2 pr-2 font-mono text-slate-600">
-                      {row.primary_sku ?? '—'}
+                {watchlist.map((row, i) => {
+                  const itemHref = vendorAlertItemUrl(vendorSlug, row);
+                  return (
+                  <tr key={i} className="border-b border-slate-50 hover:bg-brand-blue-50/30">
+                    <td className="py-2 pr-2 font-mono">
+                      <Link
+                        href={itemHref}
+                        className="text-brand-blue-600 hover:underline"
+                      >
+                        {row.primary_sku ?? '—'}
+                      </Link>
                     </td>
-                    <td className="max-w-[10rem] truncate py-2 pr-2 text-slate-800">
-                      {row.item_name}
+                    <td className="max-w-[10rem] truncate py-2 pr-2">
+                      <Link
+                        href={itemHref}
+                        className="text-brand-blue-600 hover:underline"
+                      >
+                        {row.item_name}
+                      </Link>
                       <span
                         className={`ml-1 rounded px-1 text-[10px] ${
                           row.alert_status === 'out_of_stock'
@@ -216,10 +228,16 @@ export function VendorInsightsPanel({
                       </span>
                     </td>
                     <td className="py-2 text-right font-mono font-semibold">
-                      {formatLkr(row.line_value)}
+                      <Link
+                        href={itemHref}
+                        className="text-brand-blue-600 hover:underline"
+                      >
+                        {formatLkr(row.line_value)}
+                      </Link>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

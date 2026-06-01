@@ -42,7 +42,7 @@ function AlertPillLink({
     <Link
       href={href}
       onClick={onNavigate}
-      className={`inline-flex min-w-8 justify-center rounded-full border px-2 py-0.5 font-mono text-xs font-semibold transition-colors ${cls}`}
+      className={`inline-flex min-w-9 justify-center rounded-full border px-2.5 py-1 font-mono text-xs font-semibold transition-colors ${cls}`}
     >
       {count.toLocaleString()}
     </Link>
@@ -70,37 +70,39 @@ export function VendorHubTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
-        <thead className="bg-slate-50/80">
-          <tr className="border-b border-slate-100">
-            <th className="px-4 py-3 font-medium text-slate-500">Vendor</th>
-            <th className="hidden px-4 py-3 font-medium text-slate-500 md:table-cell">
+      <table className="w-full min-w-[48rem] text-left text-sm">
+        <thead className="bg-slate-50">
+          <tr className="border-b border-slate-200">
+            <th className="px-4 py-3 font-medium text-slate-600 lg:px-6">Vendor</th>
+            <th className="hidden px-4 py-3 font-medium text-slate-600 md:table-cell lg:px-6">
               Location
             </th>
-            <th className="px-4 py-3 text-right font-medium text-slate-500">
+            <th className="px-4 py-3 text-right font-medium text-slate-600 lg:px-6">
               SKUs
             </th>
-            <th className="px-4 py-3 text-right font-medium text-slate-500">
+            <th className="px-4 py-3 text-right font-medium text-slate-600 lg:px-6">
               Stock value
             </th>
             {portfolioTotal > 0 && (
-              <th className="hidden px-4 py-3 text-right font-medium text-slate-500 lg:table-cell">
+              <th className="hidden px-4 py-3 text-right font-medium text-slate-600 sm:table-cell lg:px-6">
                 Share
               </th>
             )}
-            <th className="hidden px-4 py-3 text-right font-medium text-slate-500 md:table-cell">
-              Risk %
+            <th className="hidden px-4 py-3 text-right font-medium text-slate-600 lg:table-cell lg:px-6">
+              At-risk
             </th>
-            <th className="px-4 py-3 text-center font-medium text-slate-500">
+            <th className="px-4 py-3 text-center font-medium text-slate-600 lg:px-6">
               Low
             </th>
-            <th className="px-4 py-3 text-center font-medium text-slate-500">
+            <th className="px-4 py-3 text-center font-medium text-slate-600 lg:px-6">
               Out
             </th>
-            <th className="hidden px-4 py-3 font-medium text-slate-500 sm:table-cell">
+            <th className="hidden px-4 py-3 font-medium text-slate-600 md:table-cell lg:px-6">
               Updated
             </th>
-            <th className="w-10 px-2 py-3" aria-hidden />
+            <th className="w-24 px-4 py-3 text-right font-medium text-slate-600 lg:px-6">
+              <span className="sr-only">Open</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -111,14 +113,17 @@ export function VendorHubTable({
             const lowHref = vendorInventoryUrl(v.slug, {
               status: 'low_stock',
               sort: 'value_desc',
+              tab: 'stock',
             });
             const outHref = vendorInventoryUrl(v.slug, {
               status: 'out_of_stock',
               sort: 'value_desc',
+              tab: 'stock',
             });
             const riskHref = vendorInventoryUrl(v.slug, {
               status: 'out_of_stock',
               sort: 'value_desc',
+              tab: 'stock',
             });
 
             return (
@@ -133,54 +138,53 @@ export function VendorHubTable({
                     router.push(href);
                   }
                 }}
-                className={`group cursor-pointer border-b border-slate-100 transition-colors hover:bg-brand-blue-50/50 ${
-                  i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
+                className={`group cursor-pointer border-b border-slate-100 transition-colors hover:bg-brand-blue-50/40 ${
+                  i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                 }`}
               >
-                <td className="px-4 py-3.5">
-                  <span className="font-semibold text-slate-900 group-hover:text-brand-blue-700">
+                <td className="px-4 py-4 lg:px-6">
+                  <span className="font-display text-base font-semibold text-slate-900 group-hover:text-brand-blue-700">
                     {v.name}
                   </span>
-                  <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                  <span className="mt-0.5 block font-mono text-xs text-slate-400">
                     {v.code}
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-500 md:hidden">
+                  <span className="mt-1 block text-sm text-slate-500 md:hidden">
                     {v.location_name}
                   </span>
                 </td>
-                <td className="hidden px-4 py-3.5 text-slate-600 md:table-cell">
+                <td className="hidden px-4 py-4 text-slate-600 md:table-cell lg:px-6">
                   {v.location_name}
                 </td>
-                <td className="px-4 py-3.5 text-right font-mono tabular-nums text-slate-700">
+                <td className="px-4 py-4 text-right font-mono tabular-nums text-slate-700 lg:px-6">
                   {Number(v.sku_count).toLocaleString()}
                 </td>
-                <td className="px-4 py-3.5 text-right font-mono text-sm font-semibold whitespace-nowrap tabular-nums text-slate-900">
+                <td className="px-4 py-4 text-right font-mono text-base font-semibold whitespace-nowrap tabular-nums text-slate-900 lg:px-6">
                   {formatLkr(v.total_value)}
                 </td>
                 {portfolioTotal > 0 && (
-                  <td className="hidden px-4 py-3.5 text-right lg:table-cell">
-                    <span className="font-mono text-xs text-slate-500">
+                  <td className="hidden px-4 py-4 text-right sm:table-cell lg:px-6">
+                    <span className="font-mono text-sm font-medium text-slate-700">
                       {share}%
                     </span>
-                    <div className="mt-1 ml-auto h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-brand-blue-400"
-                        style={{ width: `${Math.min(share, 100)}%` }}
-                      />
-                    </div>
                   </td>
                 )}
-                <td className="hidden px-4 py-3.5 text-right md:table-cell">
+                <td className="hidden px-4 py-4 text-right lg:table-cell lg:px-6">
                   <Link
                     href={riskHref}
                     onClick={stopRowNav}
-                    className="font-mono text-xs font-semibold text-brand-gold-700 hover:underline"
-                    title={formatLkr(v.at_risk_value)}
+                    className="block"
+                    title={`${v.risk_pct}% of vendor value · ${formatLkr(v.at_risk_value)} at risk`}
                   >
-                    {v.risk_pct}%
+                    <span className="font-mono text-sm font-semibold text-brand-gold-800">
+                      {v.risk_pct}%
+                    </span>
+                    <span className="mt-0.5 block font-mono text-xs text-slate-500">
+                      {formatLkr(v.at_risk_value)}
+                    </span>
                   </Link>
                 </td>
-                <td className="px-4 py-3.5 text-center">
+                <td className="px-4 py-4 text-center lg:px-6">
                   <AlertPillLink
                     count={Number(v.low_stock)}
                     tone="amber"
@@ -188,7 +192,7 @@ export function VendorHubTable({
                     onNavigate={stopRowNav}
                   />
                 </td>
-                <td className="px-4 py-3.5 text-center">
+                <td className="px-4 py-4 text-center lg:px-6">
                   <AlertPillLink
                     count={Number(v.out_of_stock)}
                     tone="red"
@@ -196,17 +200,17 @@ export function VendorHubTable({
                     onNavigate={stopRowNav}
                   />
                 </td>
-                <td className="hidden px-4 py-3.5 font-mono text-xs whitespace-nowrap text-slate-500 sm:table-cell">
+                <td className="hidden px-4 py-4 font-mono text-xs whitespace-nowrap text-slate-500 md:table-cell lg:px-6">
                   {new Date(v.imported_at).toLocaleDateString('en-GB')}
                 </td>
-                <td className="px-2 py-3.5 text-right">
+                <td className="px-4 py-4 text-right lg:px-6">
                   <Link
                     href={href}
                     onClick={stopRowNav}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-blue-600 opacity-0 transition group-hover:opacity-100 hover:bg-brand-blue-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500"
-                    aria-label={`Open ${v.name} inventory`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-brand-blue-600 transition group-hover:border-brand-blue-200 group-hover:bg-brand-blue-50"
                   >
-                    →
+                    Open
+                    <span aria-hidden>→</span>
                   </Link>
                 </td>
               </tr>

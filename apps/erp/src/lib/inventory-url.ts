@@ -30,3 +30,25 @@ export function alertsUrl(tab?: 'low' | 'out' | 'variance' | 'new_outs') {
   const qs = sp.toString();
   return qs ? `/inventory/alerts?${qs}` : '/inventory/alerts';
 }
+
+export type VendorAlertItemRow = {
+  primary_sku: string | null;
+  item_name: string;
+  alert_status: 'low_stock' | 'out_of_stock' | 'variance';
+};
+
+export function vendorAlertItemUrl(slug: string, row: VendorAlertItemRow) {
+  const q = row.primary_sku?.trim() || row.item_name.trim();
+  return vendorInventoryUrl(slug, {
+    tab: 'stock',
+    q: q || undefined,
+    sort: 'value_desc',
+    status:
+      row.alert_status === 'low_stock'
+        ? 'low_stock'
+        : row.alert_status === 'out_of_stock'
+          ? 'out_of_stock'
+          : undefined,
+    dataIssues: row.alert_status === 'variance' ? 'variance' : undefined,
+  });
+}

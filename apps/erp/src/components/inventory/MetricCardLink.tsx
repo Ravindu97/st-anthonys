@@ -17,8 +17,17 @@ export function MetricCardCountLink({
   className?: string;
 }) {
   return (
-    <Link href={href} className={`block transition hover:opacity-90 ${className ?? ''}`}>
-      <MetricCardCount label={label} count={count} sub={sub} accent={accent} />
+    <Link
+      href={href}
+      className={`block h-full transition hover:opacity-90 ${className ?? ''}`}
+    >
+      <MetricCardCount
+        label={label}
+        count={count}
+        sub={sub}
+        accent={accent}
+        className="h-full"
+      />
     </Link>
   );
 }
@@ -37,8 +46,11 @@ export function MetricCardMoneyLink({
   className?: string;
 }) {
   return (
-    <Link href={href} className={`block transition hover:opacity-90 ${className ?? ''}`}>
-      <MetricCardMoney label={label} amount={amount} sub={sub} />
+    <Link
+      href={href}
+      className={`block h-full transition hover:opacity-90 ${className ?? ''}`}
+    >
+      <MetricCardMoney label={label} amount={amount} sub={sub} className="h-full" />
     </Link>
   );
 }

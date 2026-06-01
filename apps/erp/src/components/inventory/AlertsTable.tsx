@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
-import { vendorInventoryUrl } from '@/lib/inventory-url';
+import { vendorAlertItemUrl } from '@/lib/inventory-url';
 import type { CrossVendorAlertRow } from '@/lib/inventory-search';
+
+const itemLinkClass =
+  'text-brand-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500';
 
 export function AlertsTable({ items }: { items: CrossVendorAlertRow[] }) {
   return (
@@ -24,46 +27,42 @@ export function AlertsTable({ items }: { items: CrossVendorAlertRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((row, i) => (
-            <tr
-              key={`${row.vendor_code}-${row.primary_sku}-${i}`}
-              className="border-b border-slate-50 hover:bg-brand-blue-50/30"
-            >
-              <td className="px-4 py-3">
-                <Link
-                  href={vendorInventoryUrl(row.vendor_slug, {
-                    status:
-                      row.alert_status === 'low_stock'
-                        ? 'low_stock'
-                        : row.alert_status === 'out_of_stock'
-                          ? 'out_of_stock'
-                          : undefined,
-                    sort: 'value_desc',
-                    dataIssues:
-                      row.alert_status === 'variance' ? 'variance' : undefined,
-                  })}
-                  className="font-semibold text-brand-blue-600 hover:underline"
-                >
-                  {row.vendor_name}
-                </Link>
-              </td>
-              <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                {row.primary_sku ?? '—'}
-              </td>
-              <td className="max-w-xs truncate px-4 py-3 text-slate-900">
-                {row.item_name}
-              </td>
-              <td className="max-w-[8rem] truncate px-4 py-3 text-xs text-slate-500">
-                {row.stock_group_name}
-              </td>
-              <td className="px-4 py-3 text-center">
-                <StatusBadge status={row.alert_status} />
-              </td>
-              <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
-                {formatLkr(row.line_value)}
-              </td>
-            </tr>
-          ))}
+          {items.map((row, i) => {
+            const itemHref = vendorAlertItemUrl(row.vendor_slug, row);
+            return (
+              <tr
+                key={`${row.vendor_code}-${row.primary_sku}-${i}`}
+                className="border-b border-slate-50 hover:bg-brand-blue-50/30"
+              >
+                <td className="px-4 py-3">
+                  <Link href={itemHref} className={`font-semibold ${itemLinkClass}`}>
+                    {row.vendor_name}
+                  </Link>
+                </td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  <Link href={itemHref} className={itemLinkClass}>
+                    {row.primary_sku ?? '—'}
+                  </Link>
+                </td>
+                <td className="max-w-xs truncate px-4 py-3">
+                  <Link href={itemHref} className={`text-slate-900 ${itemLinkClass}`}>
+                    {row.item_name}
+                  </Link>
+                </td>
+                <td className="max-w-[8rem] truncate px-4 py-3 text-xs text-slate-500">
+                  {row.stock_group_name}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <StatusBadge status={row.alert_status} />
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <Link href={itemHref} className={itemLinkClass}>
+                    {formatLkr(row.line_value)}
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

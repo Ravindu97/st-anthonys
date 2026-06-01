@@ -20,7 +20,7 @@ export function MetricCard({
   const ribbon = accent === 'gold' ? 'bg-brand-gold-500' : 'bg-brand-blue-500';
   return (
     <div
-      className={`relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 ${className}`}
+      className={`relative flex min-h-[7.5rem] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:min-h-[8rem] sm:p-5 ${className}`}
     >
       <div className={`absolute top-0 right-0 left-0 h-1 ${ribbon}`} />
       <div className="flex items-start justify-between gap-2">
@@ -39,7 +39,9 @@ export function MetricCard({
         {value}
       </p>
       {sub && (
-        <p className="mt-1 font-mono text-[11px] text-slate-400">{sub}</p>
+        <p className="mt-auto pt-2 font-mono text-[11px] leading-snug text-slate-400">
+          {sub}
+        </p>
       )}
     </div>
   );
