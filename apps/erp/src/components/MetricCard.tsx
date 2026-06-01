@@ -1,4 +1,4 @@
-import { formatLkr } from '@/lib/format';
+import { formatLkrAmount } from '@/lib/format';
 
 export function MetricCard({
   label,
@@ -62,12 +62,12 @@ export function MetricCardMoney({
 }) {
   return (
     <MetricCard
-      label={label}
-      value={formatLkr(amount)}
+      label={`${label} (LKR)`}
+      value={formatLkrAmount(amount)}
       sub={sub}
       accent={accent}
       className={className}
-      valueClassName="text-xl leading-snug break-words sm:text-2xl lg:text-[1.65rem]"
+      valueClassName="text-xl tabular-nums whitespace-nowrap sm:text-2xl lg:text-[1.65rem]"
     />
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { formatLkr } from '@/lib/format';
+import { formatLkrAmount } from '@/lib/format';
 import { VendorHubTable, type VendorHubRow } from './VendorHubTable';
 
 export function VendorHubClient({
@@ -52,7 +52,7 @@ export function VendorHubClient({
             {portfolioTotal > 0 && (
               <span className="text-slate-400">
                 {' '}
-                · Portfolio {formatLkr(portfolioTotal)}
+                · Portfolio (LKR) {formatLkrAmount(portfolioTotal)}
               </span>
             )}
           </p>
@@ -83,7 +83,7 @@ export function VendorHubClient({
           No vendors match your search.
         </p>
       ) : (
-        <VendorHubTable vendors={filtered} totalValue={totalValue} />
+        <VendorHubTable vendors={filtered} />
       )}
     </section>
   );

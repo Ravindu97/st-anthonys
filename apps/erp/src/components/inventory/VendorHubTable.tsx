@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { formatLkr } from '@/lib/format';
+import { formatLkrAmount } from '@/lib/format';
 import { vendorInventoryUrl } from '@/lib/inventory-url';
 
 export type VendorHubRow = {
@@ -49,20 +49,8 @@ function AlertPillLink({
   );
 }
 
-function shareOfTotal(value: number, total: number) {
-  if (total <= 0) return 0;
-  return Math.round((value / total) * 100);
-}
-
-export function VendorHubTable({
-  vendors,
-  totalValue,
-}: {
-  vendors: VendorHubRow[];
-  totalValue?: number | string;
-}) {
+export function VendorHubTable({ vendors }: { vendors: VendorHubRow[] }) {
   const router = useRouter();
-  const portfolioTotal = Number(totalValue ?? 0);
 
   const stopRowNav = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -70,7 +58,7 @@ export function VendorHubTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[48rem] text-left text-sm">
+      <table className="w-full min-w-[40rem] text-left text-sm">
         <thead className="bg-slate-50">
           <tr className="border-b border-slate-200">
             <th className="px-4 py-3 font-medium text-slate-600 lg:px-6">Vendor</th>
@@ -81,15 +69,13 @@ export function VendorHubTable({
               SKUs
             </th>
             <th className="px-4 py-3 text-right font-medium text-slate-600 lg:px-6">
-              Stock value
+              Stock value (LKR)
             </th>
-            {portfolioTotal > 0 && (
-              <th className="hidden px-4 py-3 text-right font-medium text-slate-600 sm:table-cell lg:px-6">
-                Share
-              </th>
-            )}
             <th className="hidden px-4 py-3 text-right font-medium text-slate-600 lg:table-cell lg:px-6">
-              At-risk
+              <span className="block">At-risk</span>
+              <span className="block text-[10px] font-normal text-slate-400">
+                % · value (LKR)
+              </span>
             </th>
             <th className="px-4 py-3 text-center font-medium text-slate-600 lg:px-6">
               Low
@@ -108,8 +94,6 @@ export function VendorHubTable({
         <tbody>
           {vendors.map((v, i) => {
             const href = `/inventory/${v.slug}`;
-            const value = Number(v.total_value);
-            const share = shareOfTotal(value, portfolioTotal);
             const lowHref = vendorInventoryUrl(v.slug, {
               status: 'low_stock',
               sort: 'value_desc',
@@ -159,28 +143,21 @@ export function VendorHubTable({
                 <td className="px-4 py-4 text-right font-mono tabular-nums text-slate-700 lg:px-6">
                   {Number(v.sku_count).toLocaleString()}
                 </td>
-                <td className="px-4 py-4 text-right font-mono text-base font-semibold whitespace-nowrap tabular-nums text-slate-900 lg:px-6">
-                  {formatLkr(v.total_value)}
+                <td className="px-4 py-4 text-right font-mono text-sm font-semibold whitespace-nowrap tabular-nums text-slate-900 lg:px-6">
+                  {formatLkrAmount(v.total_value)}
                 </td>
-                {portfolioTotal > 0 && (
-                  <td className="hidden px-4 py-4 text-right sm:table-cell lg:px-6">
-                    <span className="font-mono text-sm font-medium text-slate-700">
-                      {share}%
-                    </span>
-                  </td>
-                )}
                 <td className="hidden px-4 py-4 text-right lg:table-cell lg:px-6">
                   <Link
                     href={riskHref}
                     onClick={stopRowNav}
-                    className="block"
-                    title={`${v.risk_pct}% of vendor value · ${formatLkr(v.at_risk_value)} at risk`}
+                    className="block whitespace-nowrap"
+                    title={`${v.risk_pct}% of vendor value · LKR ${formatLkrAmount(v.at_risk_value)} at risk`}
                   >
                     <span className="font-mono text-sm font-semibold text-brand-gold-800">
                       {v.risk_pct}%
                     </span>
-                    <span className="mt-0.5 block font-mono text-xs text-slate-500">
-                      {formatLkr(v.at_risk_value)}
+                    <span className="mt-0.5 block font-mono text-xs tabular-nums text-slate-500">
+                      {formatLkrAmount(v.at_risk_value)}
                     </span>
                   </Link>
                 </td>
