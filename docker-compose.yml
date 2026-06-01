@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: st-anthonys-db
+    environment:
+      POSTGRES_USER: stanthonys
+      POSTGRES_PASSWORD: stanthonys
+      POSTGRES_DB: stanthonys_inventory
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

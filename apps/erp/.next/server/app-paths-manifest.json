@@ -1,0 +1,8 @@
+{
+  "/api/inventory/[vendor]/items/route": "app/api/inventory/[vendor]/items/route.js",
+  "/api/inventory/[vendor]/groups/route": "app/api/inventory/[vendor]/groups/route.js",
+  "/api/inventory/[vendor]/export/route": "app/api/inventory/[vendor]/export/route.js",
+  "/(dashboard)/inventory/[vendor]/page": "app/(dashboard)/inventory/[vendor]/page.js",
+  "/(dashboard)/inventory/page": "app/(dashboard)/inventory/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js"
+}

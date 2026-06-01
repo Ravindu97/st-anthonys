@@ -1,0 +1,25 @@
+{
+  "name": "st-anthonys-inventory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/migrate.js --seed",
+    "db:setup": "node scripts/migrate.js && node scripts/migrate.js --seed",
+    "import:location-summary": "node scripts/import-location-summary.js",
+    "import:swisstek": "node scripts/import-location-summary.js \"./reference/swisstek items list.csv\" SWISSTEK SWISSTEK",
+    "validate:orange": "node scripts/validate-orange-import.js",
+    "validate:swisstek": "node scripts/validate-swisstek-import.js",
+    "import:diff-structure": "node scripts/diff-import-structure.js",
+    "dev:erp": "npm run dev --workspace=@st-anthonys/erp",
+    "build:erp": "npm run build --workspace=@st-anthonys/erp"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
+  }
+}
