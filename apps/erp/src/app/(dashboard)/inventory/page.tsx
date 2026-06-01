@@ -59,7 +59,7 @@ export default async function InventoryHubPage() {
 
       {summary && (
         <>
-          <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-5">
+          <div className="grid items-stretch gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-5">
             <MetricCardMoney
               label="Total stock value"
               amount={summary.total_value}

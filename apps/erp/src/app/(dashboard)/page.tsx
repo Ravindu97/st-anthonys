@@ -73,7 +73,7 @@ export default async function DashboardPage() {
             }
           />
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <MetricCardMoney
               label="Total stock value"
               amount={summary.total_value}
