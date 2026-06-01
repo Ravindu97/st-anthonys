@@ -35,7 +35,16 @@ node scripts/import-location-summary.js "./reference/your-vendor.csv" WATERTEC "
 
 - `db/migrations/` — PostgreSQL schema, seeds, views
 - `scripts/` — CSV import & validation
-- `apps/erp/` — Next.js dashboard (brand UI from `reference/design.md`)
+- `apps/erp/` — Next.js dashboard (brand UI spec lives in local `reference/`)
+
+## Local reference data (not in Git)
+
+The `reference/` folder holds Tally exports, screenshots, and design notes. It is listed in `.gitignore` and is **not pushed to GitHub**. Keep your own copy locally for imports:
+
+```bash
+npm run import:location-summary   # default: reference/orange product list 3.csv
+npm run import:swisstek             # reference/swisstek items list.csv
+```
 
 ## Schema
 
