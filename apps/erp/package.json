@@ -8,6 +8,7 @@
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "@st-anthonys/import": "*",
     "next": "^15.3.3",
     "pg": "^8.16.0",
     "react": "^19.1.0",

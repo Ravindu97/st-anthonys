@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import { getInventoryHubSummary } from '@/lib/inventory-search';
 import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
 import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
 import { VendorHubClient } from '@/components/inventory/VendorHubClient';
 import { alertsUrl } from '@/lib/inventory-url';
+import { listImportRuns } from '@/lib/import-runs';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +29,16 @@ function staleDays(imported_at: Date | string) {
 
 export default async function InventoryHubPage() {
   let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
+  let recentImport: Awaited<ReturnType<typeof listImportRuns>>[number] | null = null;
   let error: string | null = null;
 
   try {
-    summary = await getInventoryHubSummary();
+    const [hub, runs] = await Promise.all([
+      getInventoryHubSummary(),
+      listImportRuns(1),
+    ]);
+    summary = hub;
+    recentImport = runs[0] ?? null;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Could not load inventory';
   }
@@ -40,17 +48,36 @@ export default async function InventoryHubPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
-          Inventory hub
-        </h1>
-        {summary && (
-          <p className="mt-1 font-mono text-sm text-slate-500">
-            {summary.vendor_count} vendors ·{' '}
-            {Number(summary.sku_count).toLocaleString()} SKUs
-            {lastImport ? ` · Updated ${lastImport}` : ''}
-          </p>
-        )}
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
+            Inventory hub
+          </h1>
+          {summary && (
+            <p className="mt-1 font-mono text-sm text-slate-500">
+              {summary.vendor_count} vendors ·{' '}
+              {Number(summary.sku_count).toLocaleString()} SKUs
+              {lastImport ? ` · Updated ${lastImport}` : ''}
+            </p>
+          )}
+          {recentImport && (
+            <p className="mt-1 text-xs text-slate-500">
+              Last import: {recentImport.file_name ?? 'CSV'} ·{' '}
+              {new Date(recentImport.imported_at).toLocaleString('en-GB')}
+              {recentImport.row_counts &&
+              (recentImport.row_counts as { validation_ok?: boolean }).validation_ok ===
+                false
+                ? ' · footer check failed'
+                : ''}
+            </p>
+          )}
+        </div>
+        <Link
+          href="/import"
+          className="rounded-lg border border-brand-blue-200 bg-brand-blue-50 px-3 py-2 text-sm font-medium text-brand-blue-700 hover:bg-brand-blue-100"
+        >
+          Import CSV
+        </Link>
       </header>
 
       {error && (

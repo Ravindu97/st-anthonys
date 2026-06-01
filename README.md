@@ -50,3 +50,43 @@ npm run import:swisstek             # reference/swisstek items list.csv
 
 - `v_group_balances` — stock group rollups per snapshot
 - `v_location_summary` — leaf rows for UI / API
+
+## Stock item identity and imports
+
+Each product has an internal **`stock_item_id`** (PostgreSQL UUID from `gen_random_uuid()`). It is assigned **once** when the product is first created during import and stays the same across re-imports. It is not derived from the unit code or Tally name.
+
+**Matching on CSV import** (in order):
+
+1. Company-wide **unit code** (`stock_item_aliases.alias`, e.g. `212-4017`)
+2. **Tally name** per vendor category (`stock_items.tally_name`)
+3. **Insert** new item → new UUID
+
+Use `stock_item_id` in URLs and APIs. Use unit code / Tally name only to match rows during import.
+
+**Guards** (shared CLI and ERP):
+
+- Alias vs Tally mismatch → import aborts (no silent reassignment of SKUs)
+- Footer total vs sum of leaf values → import blocked with a detailed report
+- Unit code / Tally name conflicts → listed per CSV line (no silent fixes)
+- **Dry run** → full preview, then rollback (no DB changes)
+
+```bash
+# Preview
+npm run import:location-summary -- --dry-run ./reference/orange\ product\ list\ 3.csv ORANGE
+
+# Commit when preview passes
+npm run import:location-summary -- ./reference/orange\ product\ list\ 3.csv ORANGE
+```
+
+**ERP:** Dashboard → **Import**, or `POST /api/import/location-summary` (multipart CSV). Optional `IMPORT_API_KEY` in `apps/erp/.env.local` sends `x-import-api-key` on import/adjustment routes.
+
+**Single-unit balance update** (latest vendor snapshot only; does not create new items):
+
+```http
+PATCH /api/inventory/{vendor}/units/{stockItemId}
+Content-Type: application/json
+
+{ "quantity": 100, "rate": 4181.32, "value": 418132, "note": "manual correction" }
+```
+
+Adjustments are recorded in `inventory_adjustments`.

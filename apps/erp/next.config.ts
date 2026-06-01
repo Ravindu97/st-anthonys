@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  transpilePackages: [],
+  transpilePackages: ['@st-anthonys/import'],
 };
 
 export default nextConfig;

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "db:up": "docker compose up -d",
@@ -20,6 +21,7 @@
     "build:erp": "npm run build --workspace=@st-anthonys/erp"
   },
   "dependencies": {
+    "@st-anthonys/import": "*",
     "pg": "^8.16.0"
   }
 }
