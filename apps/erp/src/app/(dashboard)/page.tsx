@@ -1,18 +1,27 @@
 import Link from 'next/link';
-import { getInventoryHubSummary } from '@/lib/inventory-search';
+import {
+  getInventoryHubSummary,
+  searchCrossVendorAlerts,
+} from '@/lib/inventory-search';
 import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
 import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
-import { AlertStrip } from '@/components/inventory/AlertStrip';
+import { DashboardAlertsPanel } from '@/components/inventory/DashboardAlertsPanel';
 import { alertsUrl } from '@/lib/inventory-url';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
+  let newOutsCount = 0;
   let error: string | null = null;
 
   try {
-    summary = await getInventoryHubSummary();
+    const [hub, newOuts] = await Promise.all([
+      getInventoryHubSummary(),
+      searchCrossVendorAlerts({ tab: 'new_outs', page: 1, pageSize: 1 }),
+    ]);
+    summary = hub;
+    newOutsCount = newOuts.totalCount;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Database unavailable';
   }
@@ -44,16 +53,19 @@ export default async function DashboardPage() {
 
       {summary && (
         <>
-          <AlertStrip
+          <DashboardAlertsPanel
             lowStock={summary.low_stock}
             outOfStock={summary.out_of_stock}
             atRiskValue={summary.at_risk_value}
+            atRiskPct={summary.at_risk_pct}
             varianceCount={summary.variance_count}
+            newOutsCount={newOutsCount}
             topVendor={
               topRiskVendor
                 ? {
                     slug: topRiskVendor.slug,
                     name: topRiskVendor.name,
+                    at_risk_value: Number(topRiskVendor.at_risk_value),
                     low_stock: topRiskVendor.low_stock,
                     out_of_stock: topRiskVendor.out_of_stock,
                   }
