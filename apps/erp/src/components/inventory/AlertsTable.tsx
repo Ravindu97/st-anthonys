@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
-import { vendorAlertItemUrl } from '@/lib/inventory-url';
+import { unitDetailUrl, vendorInventoryUrl } from '@/lib/inventory-url';
 import type { CrossVendorAlertRow } from '@/lib/inventory-search';
 
-const itemLinkClass =
-  'text-brand-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500';
+function rowUnitHref(row: CrossVendorAlertRow) {
+  return unitDetailUrl(row.vendor_slug, {
+    stockItemId: row.stock_item_id,
+    sku: row.primary_sku,
+  });
+}
 
 export function AlertsTable({ items }: { items: CrossVendorAlertRow[] }) {
   return (
@@ -27,25 +31,34 @@ export function AlertsTable({ items }: { items: CrossVendorAlertRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((row, i) => {
-            const itemHref = vendorAlertItemUrl(row.vendor_slug, row);
+          {items.map((row) => {
+            const unitHref = rowUnitHref(row);
             return (
               <tr
-                key={`${row.vendor_code}-${row.primary_sku}-${i}`}
+                key={`${row.vendor_code}-${row.stock_item_id}`}
                 className="border-b border-slate-50 hover:bg-brand-blue-50/30"
               >
                 <td className="px-4 py-3">
-                  <Link href={itemHref} className={`font-semibold ${itemLinkClass}`}>
+                  <Link
+                    href={vendorInventoryUrl(row.vendor_slug, { tab: 'stock' })}
+                    className="font-semibold text-brand-blue-600 hover:underline"
+                  >
                     {row.vendor_name}
                   </Link>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs">
-                  <Link href={itemHref} className={itemLinkClass}>
+                <td className="px-4 py-3">
+                  <Link
+                    href={unitHref}
+                    className="font-mono text-xs font-medium text-brand-blue-600 hover:underline"
+                  >
                     {row.primary_sku ?? '—'}
                   </Link>
                 </td>
-                <td className="max-w-xs truncate px-4 py-3">
-                  <Link href={itemHref} className={`text-slate-900 ${itemLinkClass}`}>
+                <td className="max-w-xs px-4 py-3">
+                  <Link
+                    href={unitHref}
+                    className="block truncate text-slate-900 hover:text-brand-blue-600 hover:underline"
+                  >
                     {row.item_name}
                   </Link>
                 </td>
@@ -56,9 +69,7 @@ export function AlertsTable({ items }: { items: CrossVendorAlertRow[] }) {
                   <StatusBadge status={row.alert_status} />
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
-                  <Link href={itemHref} className={itemLinkClass}>
-                    {formatLkr(row.line_value)}
-                  </Link>
+                  {formatLkr(row.line_value)}
                 </td>
               </tr>
             );

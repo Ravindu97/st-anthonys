@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
 import { InsightLink } from '@/components/InsightLink';
-import { vendorAlertItemUrl, vendorInventoryUrl } from '@/lib/inventory-url';
+import { unitDetailUrl, vendorInventoryUrl } from '@/lib/inventory-url';
 
 type Pareto = {
   limit: number;
@@ -10,6 +10,7 @@ type Pareto = {
 };
 
 type WatchItem = {
+  stock_item_id: string;
   primary_sku: string | null;
   item_name: string;
   stock_group_name: string;
@@ -198,44 +199,45 @@ export function VendorInsightsPanel({
                 </tr>
               </thead>
               <tbody>
-                {watchlist.map((row, i) => {
-                  const itemHref = vendorAlertItemUrl(vendorSlug, row);
+                {watchlist.map((row) => {
+                  const unitHref = unitDetailUrl(vendorSlug, {
+                    stockItemId: row.stock_item_id,
+                    sku: row.primary_sku,
+                  });
                   return (
-                  <tr key={i} className="border-b border-slate-50 hover:bg-brand-blue-50/30">
-                    <td className="py-2 pr-2 font-mono">
-                      <Link
-                        href={itemHref}
-                        className="text-brand-blue-600 hover:underline"
-                      >
-                        {row.primary_sku ?? '—'}
-                      </Link>
-                    </td>
-                    <td className="max-w-[10rem] truncate py-2 pr-2">
-                      <Link
-                        href={itemHref}
-                        className="text-brand-blue-600 hover:underline"
-                      >
-                        {row.item_name}
-                      </Link>
-                      <span
-                        className={`ml-1 rounded px-1 text-[10px] ${
-                          row.alert_status === 'out_of_stock'
-                            ? 'bg-red-50 text-red-700'
-                            : 'bg-brand-gold-50 text-brand-gold-700'
-                        }`}
-                      >
-                        {row.alert_status === 'out_of_stock' ? 'Out' : 'Low'}
-                      </span>
-                    </td>
-                    <td className="py-2 text-right font-mono font-semibold">
-                      <Link
-                        href={itemHref}
-                        className="text-brand-blue-600 hover:underline"
-                      >
+                    <tr
+                      key={row.stock_item_id}
+                      className="border-b border-slate-50"
+                    >
+                      <td className="py-2 pr-2">
+                        <Link
+                          href={unitHref}
+                          className="font-mono text-brand-blue-600 hover:underline"
+                        >
+                          {row.primary_sku ?? '—'}
+                        </Link>
+                      </td>
+                      <td className="max-w-[10rem] truncate py-2 pr-2">
+                        <Link
+                          href={unitHref}
+                          className="text-slate-800 hover:text-brand-blue-600 hover:underline"
+                        >
+                          {row.item_name}
+                        </Link>
+                        <span
+                          className={`ml-1 rounded px-1 text-[10px] ${
+                            row.alert_status === 'out_of_stock'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-brand-gold-50 text-brand-gold-700'
+                          }`}
+                        >
+                          {row.alert_status === 'out_of_stock' ? 'Out' : 'Low'}
+                        </span>
+                      </td>
+                      <td className="py-2 text-right font-mono font-semibold">
                         {formatLkr(row.line_value)}
-                      </Link>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>

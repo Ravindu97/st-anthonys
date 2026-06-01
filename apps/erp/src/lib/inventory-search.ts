@@ -550,6 +550,7 @@ export async function getPriorityWatchlist(categoryCode: string, limit = 15) {
     `
     ${LATEST_SNAPSHOT_CTE}
     SELECT
+      v.stock_item_id,
       v.primary_sku,
       v.item_name,
       v.stock_group_name,
@@ -569,6 +570,7 @@ export async function getPriorityWatchlist(categoryCode: string, limit = 15) {
     [categoryCode, limit]
   );
   return rows as {
+    stock_item_id: string;
     primary_sku: string | null;
     item_name: string;
     stock_group_name: string;
@@ -583,6 +585,7 @@ export type CrossVendorAlertRow = {
   vendor_code: string;
   vendor_name: string;
   vendor_slug: string;
+  stock_item_id: string;
   primary_sku: string | null;
   item_name: string;
   stock_group_name: string;
@@ -591,6 +594,42 @@ export type CrossVendorAlertRow = {
   line_value: string;
   alert_status: 'low_stock' | 'out_of_stock' | 'variance';
 };
+
+export type UnitStockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+
+export type InventoryUnitDetail = {
+  stock_item_id: string;
+  balance_id: string;
+  primary_sku: string | null;
+  item_name: string;
+  tally_name: string | null;
+  stock_group_name: string;
+  category_name: string;
+  unit_code: string;
+  quantity: string | number | null;
+  rate: string | number | null;
+  value: string | number | null;
+  computed_value: string | number | null;
+  value_variance: boolean;
+  line_value: string;
+  stock_status: UnitStockStatus;
+  has_variance_alert: boolean;
+  vendor_code: string;
+  vendor_name: string;
+  vendor_slug: string;
+  location_name: string;
+  period_starts_on: Date | string;
+  period_ends_on: Date | string;
+  imported_at: Date | string;
+  previous_quantity: number | null;
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isStockItemUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
 
 export async function searchCrossVendorAlerts(params: {
   tab: 'low' | 'out' | 'variance' | 'new_outs' | 'all';
@@ -634,6 +673,7 @@ export async function searchCrossVendorAlerts(params: {
       l.vendor_code,
       l.vendor_name,
       l.vendor_slug,
+      v.stock_item_id,
       v.primary_sku,
       v.item_name,
       v.stock_group_name,
@@ -714,6 +754,7 @@ async function searchNewOutsSincePreviousImport(
       n.vendor_code,
       n.vendor_name,
       n.vendor_slug,
+      n.stock_item_id,
       a.alias AS primary_sku,
       si.name AS item_name,
       sg.name AS stock_group_name,
@@ -804,4 +845,78 @@ export async function getSnapshotDiffSummary(categoryCode: string) {
     restocked_count: Number(r.restocked_count),
     value_change: Number(r.value_change),
   };
+}
+
+export async function getInventoryUnitDetail(
+  categoryCode: string,
+  unitKey: string
+): Promise<InventoryUnitDetail | null> {
+  const pool = getPool();
+  const decoded = decodeURIComponent(unitKey);
+  const byId = isStockItemUuid(decoded);
+
+  const { rows } = await pool.query(
+    `
+    ${LATEST_SNAPSHOT_CTE},
+    ranked AS (
+      SELECT
+        inv.id AS snapshot_id,
+        ROW_NUMBER() OVER (ORDER BY inv.created_at DESC) AS rn
+      FROM inventory_snapshots inv
+      JOIN locations loc ON loc.id = inv.location_id
+      JOIN stock_categories cat ON cat.id = loc.stock_category_id
+      WHERE cat.code = $1
+    ),
+    previous_snap AS (SELECT snapshot_id FROM ranked WHERE rn = 2),
+    prev_qty AS (
+      SELECT ib.stock_item_id, ib.quantity AS previous_quantity
+      FROM inventory_balances ib
+      JOIN previous_snap ps ON ps.snapshot_id = ib.snapshot_id
+    )
+    SELECT
+      v.stock_item_id,
+      v.balance_id,
+      v.primary_sku,
+      v.item_name,
+      v.tally_name,
+      v.stock_group_name,
+      v.category_name,
+      v.unit_code,
+      v.quantity,
+      v.rate,
+      v.value,
+      v.computed_value,
+      v.value_variance,
+      ${LINE_VALUE_SQL} AS line_value,
+      CASE
+        WHEN COALESCE(v.quantity, 0) <= 0 THEN 'out_of_stock'
+        WHEN COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10 THEN 'low_stock'
+        ELSE 'in_stock'
+      END AS stock_status,
+      v.value_variance AS has_variance_alert,
+      s.category_code AS vendor_code,
+      s.category_name AS vendor_name,
+      LOWER(s.category_code) AS vendor_slug,
+      s.location_name,
+      s.period_starts_on,
+      s.period_ends_on,
+      s.imported_at,
+      pq.previous_quantity
+    FROM v_location_summary v
+    JOIN snap s ON s.snapshot_id = v.snapshot_id
+    LEFT JOIN prev_qty pq ON pq.stock_item_id = v.stock_item_id
+    WHERE ${byId ? 'v.stock_item_id = $2::uuid' : 'v.primary_sku = $2'}
+    LIMIT 1
+    `,
+    byId ? [categoryCode, decoded] : [categoryCode, decoded]
+  );
+
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+  return {
+    ...row,
+    previous_quantity:
+      row.previous_quantity != null ? Number(row.previous_quantity) : null,
+  } as InventoryUnitDetail;
 }

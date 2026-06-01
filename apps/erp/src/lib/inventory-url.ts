@@ -24,31 +24,20 @@ export function vendorInventoryUrl(
   return qs ? `${base}?${qs}` : base;
 }
 
-export function alertsUrl(tab?: 'low' | 'out' | 'variance' | 'new_outs') {
+export function alertsUrl(tab?: 'low' | 'out' | 'variance' | 'new_outs' | 'all') {
   const sp = new URLSearchParams();
   if (tab) sp.set('tab', tab);
   const qs = sp.toString();
   return qs ? `/inventory/alerts?${qs}` : '/inventory/alerts';
 }
 
-export type VendorAlertItemRow = {
-  primary_sku: string | null;
-  item_name: string;
-  alert_status: 'low_stock' | 'out_of_stock' | 'variance';
-};
-
-export function vendorAlertItemUrl(slug: string, row: VendorAlertItemRow) {
-  const q = row.primary_sku?.trim() || row.item_name.trim();
-  return vendorInventoryUrl(slug, {
-    tab: 'stock',
-    q: q || undefined,
-    sort: 'value_desc',
-    status:
-      row.alert_status === 'low_stock'
-        ? 'low_stock'
-        : row.alert_status === 'out_of_stock'
-          ? 'out_of_stock'
-          : undefined,
-    dataIssues: row.alert_status === 'variance' ? 'variance' : undefined,
-  });
+/** Prefer stockItemId when linking from alert rows (stable); SKU-only URLs may match first duplicate. */
+export function unitDetailUrl(
+  vendorSlug: string,
+  opts: { sku?: string | null; stockItemId?: string }
+) {
+  const slug = vendorSlug.toLowerCase();
+  const key = opts.stockItemId ?? opts.sku;
+  if (!key) return `/inventory/${slug}`;
+  return `/inventory/${slug}/unit/${encodeURIComponent(key)}`;
 }
