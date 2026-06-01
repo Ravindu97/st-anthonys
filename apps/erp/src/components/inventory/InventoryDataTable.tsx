@@ -1,3 +1,5 @@
+'use client';
+
 import { formatLkr } from '@/lib/format';
 import type { InventoryItemRow } from './types';
 
@@ -24,22 +26,99 @@ function stockBadge(qty: number) {
   );
 }
 
-export function InventoryDataTable({ rows }: { rows: InventoryItemRow[] }) {
+function SortHeader({
+  label,
+  active,
+  direction,
+  onClick,
+  align = 'left',
+}: {
+  label: string;
+  active: boolean;
+  direction?: 'asc' | 'desc';
+  onClick?: () => void;
+  align?: 'left' | 'right';
+}) {
+  if (!onClick) {
+    return (
+      <th
+        className={`px-4 py-3 font-medium text-slate-500 ${align === 'right' ? 'text-right' : ''}`}
+      >
+        {label}
+      </th>
+    );
+  }
+
+  return (
+    <th className={`px-4 py-3 ${align === 'right' ? 'text-right' : ''}`}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 text-left text-sm font-medium transition-colors ${
+          active
+            ? 'text-brand-blue-700'
+            : 'text-slate-500 hover:text-brand-blue-600'
+        }`}
+      >
+        {label}
+        <span className="font-mono text-[10px] text-brand-blue-500" aria-hidden>
+          {active ? (direction === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+type Props = {
+  rows: InventoryItemRow[];
+  sort?: string;
+  onSortChange?: (sort: string) => void;
+};
+
+export function InventoryDataTable({ rows, sort, onSortChange }: Props) {
+  const skuActive = sort === 'sku_asc' || sort === 'sku_desc';
+  const valueActive = sort === 'value_desc' || sort === 'value_asc';
+  const qtyActive = sort === 'qty_desc' || sort === 'qty_asc';
+
+  const toggleSku = () => {
+    onSortChange?.(sort === 'sku_asc' ? 'sku_desc' : 'sku_asc');
+  };
+  const toggleValue = () => {
+    onSortChange?.(sort === 'value_desc' ? 'value_asc' : 'value_desc');
+  };
+  const toggleQty = () => {
+    onSortChange?.(sort === 'qty_desc' ? 'qty_asc' : 'qty_desc');
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
         <table className="min-w-[640px] w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
             <tr className="border-b border-slate-100">
-              <th className="px-4 py-3 font-medium text-slate-500">Product</th>
-              <th className="px-4 py-3 font-medium text-slate-500">Qty</th>
+              <SortHeader
+                label="Unit code / product"
+                active={skuActive}
+                direction={sort === 'sku_desc' ? 'desc' : 'asc'}
+                onClick={onSortChange ? toggleSku : undefined}
+              />
+              <SortHeader
+                label="Qty"
+                active={qtyActive}
+                direction={sort === 'qty_desc' ? 'desc' : 'asc'}
+                onClick={onSortChange ? toggleQty : undefined}
+              />
               <th className="hidden px-4 py-3 font-medium text-slate-500 md:table-cell">
                 Rate
               </th>
               <th className="px-4 py-3 font-medium text-slate-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-slate-500">
-                Value
-              </th>
+              <SortHeader
+                label="Value"
+                active={valueActive}
+                direction={sort === 'value_desc' ? 'desc' : 'asc'}
+                onClick={onSortChange ? toggleValue : undefined}
+                align="right"
+              />
             </tr>
           </thead>
           <tbody>
@@ -54,7 +133,7 @@ export function InventoryDataTable({ rows }: { rows: InventoryItemRow[] }) {
                 >
                   <td className="px-4 py-3">
                     {row.primary_sku && (
-                      <span className="block font-mono text-[10px] text-slate-400">
+                      <span className="block font-mono text-xs font-semibold text-slate-600">
                         {row.primary_sku}
                       </span>
                     )}

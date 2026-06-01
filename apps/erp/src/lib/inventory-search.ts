@@ -42,20 +42,38 @@ const LATEST_SNAPSHOT_CTE = `
   )
 `;
 
-function parseSort(sort?: string): { column: string; direction: 'ASC' | 'DESC' } {
-  const defaultSort = { column: 'v.value', direction: 'DESC' as const };
-  if (!sort) return defaultSort;
-  const [key, dir] = sort.split('_');
-  const direction = dir === 'asc' ? 'ASC' : 'DESC';
+/** Natural order for Tally unit codes like 133-1072, 133-100, MF000-20 */
+function skuNaturalOrderSql(direction: 'ASC' | 'DESC'): string {
+  const d = direction;
+  const missingNum = d === 'ASC' ? '9223372036854775807' : '-1';
+  return [
+    `COALESCE((regexp_match(COALESCE(v.primary_sku, ''), '^([0-9]+)'))[1]::bigint, ${missingNum}) ${d}`,
+    `COALESCE((regexp_match(COALESCE(v.primary_sku, ''), '-([0-9]+)'))[1]::bigint, ${missingNum}) ${d}`,
+    `COALESCE(v.primary_sku, '') ${d} NULLS LAST`,
+  ].join(', ');
+}
+
+function buildOrderBy(sort?: string): string {
+  const tieBreak = 'v.item_name ASC';
+  if (!sort) return `v.value DESC NULLS LAST, ${tieBreak}`;
+
+  const lastUnderscore = sort.lastIndexOf('_');
+  const key = lastUnderscore > 0 ? sort.slice(0, lastUnderscore) : sort;
+  const dirToken = lastUnderscore > 0 ? sort.slice(lastUnderscore + 1) : 'desc';
+  const direction = dirToken === 'asc' ? 'ASC' : 'DESC';
+
+  if (key === 'sku' || key === 'unit') {
+    return `${skuNaturalOrderSql(direction)}, ${tieBreak}`;
+  }
+
   const map: Record<string, string> = {
     value: 'v.value',
     qty: 'v.quantity',
     name: 'v.item_name',
-    sku: 'v.primary_sku',
     group: 'v.stock_group_name',
   };
-  const column = map[key ?? 'value'] ?? 'v.value';
-  return { column, direction };
+  const column = map[key] ?? 'v.value';
+  return `${column} ${direction} NULLS LAST, ${tieBreak}`;
 }
 
 function buildStatusClause(status: StockStatus): string {
@@ -263,7 +281,7 @@ export async function searchInventoryItems(
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(25, params.pageSize ?? 50));
   const offset = (page - 1) * pageSize;
-  const { column, direction } = parseSort(params.sort);
+  const orderBy = buildOrderBy(params.sort);
 
   const { sql: filterSql, values: filterValues } = buildFilterClause(params, 2);
 
@@ -284,7 +302,7 @@ export async function searchInventoryItems(
     FROM v_location_summary v
     JOIN snap s ON s.snapshot_id = v.snapshot_id
     WHERE 1=1 ${filterSql}
-    ORDER BY ${column} ${direction} NULLS LAST, v.item_name ASC
+    ORDER BY ${orderBy}
     LIMIT $${queryValues.length - 1} OFFSET $${queryValues.length}
     `,
     queryValues
@@ -301,7 +319,7 @@ export async function exportInventoryItems(
   params: Omit<InventorySearchParams, 'page' | 'pageSize'>
 ) {
   const pool = getPool();
-  const { column, direction } = parseSort(params.sort);
+  const orderBy = buildOrderBy(params.sort);
   const { sql: filterSql, values: filterValues } = buildFilterClause(params, 2);
 
   const { rows } = await pool.query(
@@ -318,7 +336,7 @@ export async function exportInventoryItems(
     FROM v_location_summary v
     JOIN snap s ON s.snapshot_id = v.snapshot_id
     WHERE 1=1 ${filterSql}
-    ORDER BY ${column} ${direction} NULLS LAST, v.item_name ASC
+    ORDER BY ${orderBy}
     LIMIT 50000
     `,
     [categoryCode, ...filterValues]

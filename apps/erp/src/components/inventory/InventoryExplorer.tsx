@@ -170,7 +170,11 @@ export function InventoryExplorer({
 
       {!loading && !error && totalCount > 0 && view === 'table' && (
         <>
-          <InventoryDataTable rows={items} />
+          <InventoryDataTable
+            rows={items}
+            sort={sort}
+            onSortChange={(v) => updateParams({ sort: v, page: '1' })}
+          />
           <PaginationBar
             page={page}
             pageSize={pageSize}
