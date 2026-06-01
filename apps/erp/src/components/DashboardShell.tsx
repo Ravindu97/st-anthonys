@@ -67,14 +67,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           >
             <MenuIcon />
           </button>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white hover:bg-white/10 lg:inline-flex"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <PanelIcon collapsed={collapsed} />
-          </button>
           <div className="min-w-0 flex-1">
             <BrandLogo compact />
           </div>
@@ -99,18 +91,6 @@ function MenuIcon() {
   return (
     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
       <path strokeLinecap="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" />
-    </svg>
-  );
-}
-
-function PanelIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-      {collapsed ? (
-        <path strokeLinecap="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-      ) : (
-        <path strokeLinecap="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
-      )}
     </svg>
   );
 }
