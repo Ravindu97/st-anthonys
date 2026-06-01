@@ -7,6 +7,7 @@ const STATUS_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
   { value: 'low_stock', label: 'Low stock' },
   { value: 'out_of_stock', label: 'Out of stock' },
+  { value: 'variance', label: 'Value mismatch (Tally)' },
 ] as const;
 
 const SORT_GROUPS = [

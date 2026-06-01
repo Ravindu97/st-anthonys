@@ -1,6 +1,9 @@
 import Link from 'next/link';
-import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
 import { getInventoryHubSummary } from '@/lib/inventory-search';
+import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
+import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
+import { AlertStrip } from '@/components/inventory/AlertStrip';
+import { alertsUrl } from '@/lib/inventory-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +16,12 @@ export default async function DashboardPage() {
   } catch (e) {
     error = e instanceof Error ? e.message : 'Database unavailable';
   }
+
+  const topRiskVendor = summary?.vendors
+    ? [...summary.vendors].sort(
+        (a, b) => Number(b.at_risk_value) - Number(a.at_risk_value)
+      )[0]
+    : undefined;
 
   return (
     <div className="space-y-8">
@@ -35,24 +44,49 @@ export default async function DashboardPage() {
 
       {summary && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <AlertStrip
+            lowStock={summary.low_stock}
+            outOfStock={summary.out_of_stock}
+            atRiskValue={summary.at_risk_value}
+            varianceCount={summary.variance_count}
+            topVendor={
+              topRiskVendor
+                ? {
+                    slug: topRiskVendor.slug,
+                    name: topRiskVendor.name,
+                    low_stock: topRiskVendor.low_stock,
+                    out_of_stock: topRiskVendor.out_of_stock,
+                  }
+                : undefined
+            }
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <MetricCardMoney
               label="Total stock value"
               amount={summary.total_value}
               sub={`${summary.vendor_count} active vendors`}
+            />
+            <MetricCardMoneyLink
+              href={alertsUrl()}
+              label="At-risk value"
+              amount={summary.at_risk_value}
+              sub={`${summary.at_risk_pct}% of portfolio`}
             />
             <MetricCardCount
               label="SKU lines"
               count={summary.sku_count}
               sub="Across all vendors"
             />
-            <MetricCardCount
+            <MetricCardCountLink
+              href={alertsUrl('low')}
               label="Low stock SKUs"
               count={summary.low_stock}
               accent="gold"
               sub="Under 10 units"
             />
-            <MetricCardCount
+            <MetricCardCountLink
+              href={alertsUrl('out')}
               label="Out of stock"
               count={summary.out_of_stock}
               accent="gold"
@@ -60,15 +94,28 @@ export default async function DashboardPage() {
           </div>
 
           <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-            <h2 className="font-display text-lg font-semibold text-slate-900">
-              Inventory hub
-            </h2>
-            <Link
-              href="/inventory"
-              className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
-            >
-              View vendors →
-            </Link>
+            <div>
+              <h2 className="font-display text-lg font-semibold text-slate-900">
+                Inventory hub
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Vendors, insights, and alert center
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/inventory"
+                className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
+              >
+                View vendors
+              </Link>
+              <Link
+                href="/inventory/alerts"
+                className="rounded-lg border border-brand-blue-200 px-4 py-2 text-sm font-medium text-brand-blue-700 hover:bg-brand-blue-50"
+              >
+                Alert center
+              </Link>
+            </div>
           </section>
         </>
       )}

@@ -11,7 +11,15 @@ export type InventorySearchParams = {
   sort?: string;
   page?: number;
   pageSize?: number;
+  dataIssues?: 'variance';
 };
+
+const AT_RISK_LINE_SQL = `(
+  COALESCE(v.quantity, 0) <= 0
+  OR (COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10)
+)`;
+
+const LINE_VALUE_SQL = `COALESCE(v.value, v.quantity * v.rate, 0)`;
 
 export type InventoryItemRow = {
   stock_group_name: string;
@@ -118,6 +126,10 @@ function buildFilterClause(
     sql += buildStatusClause(params.status);
   }
 
+  if (params.dataIssues === 'variance') {
+    sql += ` AND v.value_variance = true`;
+  }
+
   return { sql, values };
 }
 
@@ -206,13 +218,25 @@ export async function getActiveVendors() {
       )::int AS low_stock,
       COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) <= 0)::int AS out_of_stock,
       COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) >= 10)::int AS in_stock,
+      COALESCE(SUM(
+        COALESCE(ib.value, ib.quantity * ib.rate, 0)
+      ) FILTER (
+        WHERE COALESCE(ib.quantity, 0) <= 0
+           OR (COALESCE(ib.quantity, 0) > 0 AND COALESCE(ib.quantity, 0) < 10)
+      ), 0) AS at_risk_value,
       MAX(l.imported_at) AS imported_at
     FROM latest l
     JOIN inventory_balances ib ON ib.snapshot_id = l.snapshot_id
     GROUP BY l.code, l.name, l.location_name, l.imported_at
     ORDER BY total_value DESC
   `);
-  return rows as {
+  return rows.map((r) => ({
+    ...r,
+    risk_pct:
+      Number(r.total_value) > 0
+        ? Math.round((Number(r.at_risk_value) / Number(r.total_value)) * 100)
+        : 0,
+  })) as {
     code: string;
     name: string;
     location_name: string;
@@ -222,19 +246,26 @@ export async function getActiveVendors() {
     low_stock: number;
     out_of_stock: number;
     in_stock: number;
+    at_risk_value: string;
+    risk_pct: number;
     imported_at: Date;
   }[];
 }
 
 export async function getInventoryHubSummary() {
   const vendors = await getActiveVendors();
+  const total_value = vendors.reduce((s, v) => s + Number(v.total_value), 0);
+  const at_risk_value = vendors.reduce((s, v) => s + Number(v.at_risk_value), 0);
   return {
     vendor_count: vendors.length,
     sku_count: vendors.reduce((s, v) => s + Number(v.sku_count), 0),
-    total_value: vendors.reduce((s, v) => s + Number(v.total_value), 0),
+    total_value,
     low_stock: vendors.reduce((s, v) => s + Number(v.low_stock), 0),
     out_of_stock: vendors.reduce((s, v) => s + Number(v.out_of_stock), 0),
     in_stock: vendors.reduce((s, v) => s + Number(v.in_stock), 0),
+    at_risk_value,
+    at_risk_pct: total_value > 0 ? Math.round((at_risk_value / total_value) * 100) : 0,
+    variance_count: await getVarianceCount(),
     vendors,
   };
 }
@@ -373,4 +404,404 @@ export function stockStatusLabel(qty: number): string {
   if (qty <= 0) return 'Out of stock';
   if (qty < 10) return 'Low stock';
   return 'In stock';
+}
+
+export async function getVarianceCount(categoryCode?: string) {
+  const pool = getPool();
+  if (categoryCode) {
+    const { rows } = await pool.query(
+      `
+      ${LATEST_SNAPSHOT_CTE}
+      SELECT COUNT(*)::int AS count
+      FROM v_location_summary v
+      JOIN snap s ON s.snapshot_id = v.snapshot_id
+      WHERE v.value_variance = true
+      `,
+      [categoryCode]
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+  const { rows } = await pool.query(`
+    WITH latest AS (
+      SELECT DISTINCT ON (inv.location_id)
+        inv.id AS snapshot_id
+      FROM inventory_snapshots inv
+      ORDER BY inv.location_id, inv.created_at DESC
+    )
+    SELECT COUNT(*)::int AS count
+    FROM v_location_summary v
+    JOIN latest l ON l.snapshot_id = v.snapshot_id
+    WHERE v.value_variance = true
+  `);
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function getPortfolioGroupMix(limit = 8) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    WITH latest AS (
+      SELECT DISTINCT ON (inv.location_id)
+        inv.id AS snapshot_id,
+        cat.name AS vendor_name
+      FROM inventory_snapshots inv
+      JOIN locations loc ON loc.id = inv.location_id
+      JOIN stock_categories cat ON cat.id = loc.stock_category_id
+      ORDER BY inv.location_id, inv.created_at DESC
+    )
+    SELECT
+      g.group_name,
+      SUM(g.total_value)::numeric AS total_value,
+      SUM(g.item_count)::int AS item_count
+    FROM v_group_balances g
+    JOIN latest l ON l.snapshot_id = g.snapshot_id
+    GROUP BY g.group_name
+    ORDER BY total_value DESC NULLS LAST
+    LIMIT $1
+    `,
+    [limit]
+  );
+  const total = rows.reduce((s, r) => s + Number(r.total_value), 0);
+  return rows.map((r) => ({
+    group_name: r.group_name as string,
+    total_value: r.total_value as string,
+    item_count: r.item_count as number,
+    share_pct: total > 0 ? Math.round((Number(r.total_value) / total) * 100) : 0,
+  }));
+}
+
+export async function getParetoStats(categoryCode: string, limit = 20) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    ${LATEST_SNAPSHOT_CTE},
+    ranked AS (
+      SELECT
+        v.primary_sku,
+        v.item_name,
+        ${LINE_VALUE_SQL} AS line_value,
+        SUM(${LINE_VALUE_SQL}) OVER () AS portfolio_value,
+        SUM(${LINE_VALUE_SQL}) OVER (
+          ORDER BY ${LINE_VALUE_SQL} DESC NULLS LAST
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS running_value
+      FROM v_location_summary v
+      JOIN snap s ON s.snapshot_id = v.snapshot_id
+    )
+    SELECT
+      COUNT(*)::int AS total_skus,
+      COALESCE(MAX(portfolio_value), 0) AS total_value,
+      COALESCE(
+        (
+          SELECT ROUND((running_value / NULLIF(portfolio_value, 0)) * 100)
+          FROM ranked
+          ORDER BY line_value DESC NULLS LAST
+          OFFSET $2 LIMIT 1
+        ),
+        0
+      )::int AS top_share_pct
+    FROM ranked
+    `,
+    [categoryCode, Math.max(0, limit - 1)]
+  );
+  const r = rows[0];
+  return {
+    limit,
+    total_skus: Number(r?.total_skus ?? 0),
+    total_value: Number(r?.total_value ?? 0),
+    top_share_pct: Number(r?.top_share_pct ?? 0),
+  };
+}
+
+export async function getGroupHealth(categoryCode: string) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    ${LATEST_SNAPSHOT_CTE}
+    SELECT
+      v.stock_group_name AS group_name,
+      COUNT(*)::int AS sku_count,
+      COALESCE(SUM(${LINE_VALUE_SQL}), 0) AS total_value,
+      COUNT(*) FILTER (WHERE COALESCE(v.quantity, 0) <= 0)::int AS out_of_stock,
+      COUNT(*) FILTER (
+        WHERE COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10
+      )::int AS low_stock,
+      COALESCE(SUM(${LINE_VALUE_SQL}) FILTER (WHERE ${AT_RISK_LINE_SQL}), 0) AS at_risk_value
+    FROM v_location_summary v
+    JOIN snap s ON s.snapshot_id = v.snapshot_id
+    GROUP BY v.stock_group_name
+    ORDER BY at_risk_value DESC NULLS LAST, total_value DESC NULLS LAST
+    `,
+    [categoryCode]
+  );
+  return rows as {
+    group_name: string;
+    sku_count: number;
+    total_value: string;
+    out_of_stock: number;
+    low_stock: number;
+    at_risk_value: string;
+  }[];
+}
+
+export async function getPriorityWatchlist(categoryCode: string, limit = 15) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    ${LATEST_SNAPSHOT_CTE}
+    SELECT
+      v.primary_sku,
+      v.item_name,
+      v.stock_group_name,
+      v.quantity,
+      v.unit_code,
+      ${LINE_VALUE_SQL} AS line_value,
+      CASE
+        WHEN COALESCE(v.quantity, 0) <= 0 THEN 'out_of_stock'
+        ELSE 'low_stock'
+      END AS alert_status
+    FROM v_location_summary v
+    JOIN snap s ON s.snapshot_id = v.snapshot_id
+    WHERE ${AT_RISK_LINE_SQL}
+    ORDER BY line_value DESC NULLS LAST, v.item_name ASC
+    LIMIT $2
+    `,
+    [categoryCode, limit]
+  );
+  return rows as {
+    primary_sku: string | null;
+    item_name: string;
+    stock_group_name: string;
+    quantity: string | number | null;
+    unit_code: string;
+    line_value: string;
+    alert_status: 'low_stock' | 'out_of_stock';
+  }[];
+}
+
+export type CrossVendorAlertRow = {
+  vendor_code: string;
+  vendor_name: string;
+  vendor_slug: string;
+  primary_sku: string | null;
+  item_name: string;
+  stock_group_name: string;
+  quantity: string | number | null;
+  unit_code: string;
+  line_value: string;
+  alert_status: 'low_stock' | 'out_of_stock' | 'variance';
+};
+
+export async function searchCrossVendorAlerts(params: {
+  tab: 'low' | 'out' | 'variance' | 'new_outs' | 'all';
+  page?: number;
+  pageSize?: number;
+}) {
+  const pool = getPool();
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(100, Math.max(25, params.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
+
+  if (params.tab === 'new_outs') {
+    return searchNewOutsSincePreviousImport(page, pageSize, offset);
+  }
+
+  let statusFilter = '';
+  if (params.tab === 'low') {
+    statusFilter = ` AND COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10`;
+  } else if (params.tab === 'out') {
+    statusFilter = ` AND COALESCE(v.quantity, 0) <= 0`;
+  } else if (params.tab === 'variance') {
+    statusFilter = ` AND v.value_variance = true`;
+  } else if (params.tab === 'all') {
+    statusFilter = ` AND (${AT_RISK_LINE_SQL} OR v.value_variance = true)`;
+  }
+
+  const { rows } = await pool.query(
+    `
+    WITH latest AS (
+      SELECT DISTINCT ON (inv.location_id)
+        inv.id AS snapshot_id,
+        cat.code AS vendor_code,
+        cat.name AS vendor_name,
+        LOWER(cat.code) AS vendor_slug
+      FROM inventory_snapshots inv
+      JOIN locations loc ON loc.id = inv.location_id
+      JOIN stock_categories cat ON cat.id = loc.stock_category_id
+      ORDER BY inv.location_id, inv.created_at DESC
+    )
+    SELECT
+      l.vendor_code,
+      l.vendor_name,
+      l.vendor_slug,
+      v.primary_sku,
+      v.item_name,
+      v.stock_group_name,
+      v.quantity,
+      v.unit_code,
+      ${LINE_VALUE_SQL} AS line_value,
+      CASE
+        WHEN v.value_variance THEN 'variance'
+        WHEN COALESCE(v.quantity, 0) <= 0 THEN 'out_of_stock'
+        ELSE 'low_stock'
+      END AS alert_status,
+      COUNT(*) OVER()::int AS total_count
+    FROM v_location_summary v
+    JOIN latest l ON l.snapshot_id = v.snapshot_id
+    WHERE 1=1 ${statusFilter}
+    ORDER BY line_value DESC NULLS LAST, l.vendor_name, v.item_name
+    LIMIT $1 OFFSET $2
+    `,
+    [pageSize, offset]
+  );
+
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const items = rows.map(({ total_count: _, ...item }) => item) as CrossVendorAlertRow[];
+  return { items, totalCount, page, pageSize };
+}
+
+async function searchNewOutsSincePreviousImport(
+  page: number,
+  pageSize: number,
+  offset: number
+) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    WITH ranked_snaps AS (
+      SELECT
+        inv.id AS snapshot_id,
+        inv.location_id,
+        cat.code AS vendor_code,
+        cat.name AS vendor_name,
+        LOWER(cat.code) AS vendor_slug,
+        ROW_NUMBER() OVER (
+          PARTITION BY inv.location_id ORDER BY inv.created_at DESC
+        ) AS rn
+      FROM inventory_snapshots inv
+      JOIN locations loc ON loc.id = inv.location_id
+      JOIN stock_categories cat ON cat.id = loc.stock_category_id
+    ),
+    latest AS (SELECT * FROM ranked_snaps WHERE rn = 1),
+    previous AS (SELECT * FROM ranked_snaps WHERE rn = 2),
+    cur AS (
+      SELECT
+        l.vendor_code,
+        l.vendor_name,
+        l.vendor_slug,
+        ib.stock_item_id,
+        ib.quantity AS cur_qty,
+        ib.value,
+        ib.rate
+      FROM latest l
+      JOIN inventory_balances ib ON ib.snapshot_id = l.snapshot_id
+    ),
+    prev AS (
+      SELECT
+        p.vendor_code,
+        ib.stock_item_id,
+        ib.quantity AS prev_qty
+      FROM previous p
+      JOIN inventory_balances ib ON ib.snapshot_id = p.snapshot_id
+    ),
+    new_outs AS (
+      SELECT c.*
+      FROM cur c
+      JOIN prev p ON p.vendor_code = c.vendor_code AND p.stock_item_id = c.stock_item_id
+      WHERE COALESCE(p.prev_qty, 0) > 0 AND COALESCE(c.cur_qty, 0) <= 0
+    )
+    SELECT
+      n.vendor_code,
+      n.vendor_name,
+      n.vendor_slug,
+      a.alias AS primary_sku,
+      si.name AS item_name,
+      sg.name AS stock_group_name,
+      n.cur_qty AS quantity,
+      u.code AS unit_code,
+      COALESCE(n.value, n.cur_qty * n.rate, 0) AS line_value,
+      'out_of_stock'::text AS alert_status,
+      COUNT(*) OVER()::int AS total_count
+    FROM new_outs n
+    JOIN stock_items si ON si.id = n.stock_item_id
+    JOIN stock_groups sg ON sg.id = si.group_id
+    JOIN units u ON u.id = si.base_unit_id
+    LEFT JOIN LATERAL (
+      SELECT alias FROM stock_item_aliases
+      WHERE item_id = si.id AND is_primary = true LIMIT 1
+    ) a ON true
+    ORDER BY line_value DESC NULLS LAST, n.vendor_name, si.name
+    LIMIT $1 OFFSET $2
+    `,
+    [pageSize, offset]
+  );
+
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const items = rows.map(({ total_count: _, ...item }) => ({
+    ...item,
+    alert_status: 'out_of_stock' as const,
+  })) as CrossVendorAlertRow[];
+  return { items, totalCount, page, pageSize };
+}
+
+export async function getSnapshotDiffSummary(categoryCode: string) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `
+    WITH ranked AS (
+      SELECT
+        inv.id AS snapshot_id,
+        inv.created_at,
+        ROW_NUMBER() OVER (ORDER BY inv.created_at DESC) AS rn
+      FROM inventory_snapshots inv
+      JOIN locations loc ON loc.id = inv.location_id
+      JOIN stock_categories cat ON cat.id = loc.stock_category_id
+      WHERE cat.code = $1
+    ),
+    latest AS (SELECT snapshot_id, created_at FROM ranked WHERE rn = 1),
+    previous AS (SELECT snapshot_id, created_at FROM ranked WHERE rn = 2),
+    cur AS (
+      SELECT ib.stock_item_id, ib.quantity AS qty, ib.value
+      FROM inventory_balances ib
+      JOIN latest l ON l.snapshot_id = ib.snapshot_id
+    ),
+    prev AS (
+      SELECT ib.stock_item_id, ib.quantity AS qty
+      FROM inventory_balances ib
+      JOIN previous p ON p.snapshot_id = ib.snapshot_id
+    )
+    SELECT
+      (SELECT created_at FROM latest) AS latest_at,
+      (SELECT created_at FROM previous) AS previous_at,
+      (
+        SELECT COUNT(*)::int FROM cur c
+        JOIN prev p ON p.stock_item_id = c.stock_item_id
+        WHERE COALESCE(p.qty, 0) > 0 AND COALESCE(c.qty, 0) <= 0
+      ) AS new_out_count,
+      (
+        SELECT COUNT(*)::int FROM cur c
+        JOIN prev p ON p.stock_item_id = c.stock_item_id
+        WHERE COALESCE(p.qty, 0) <= 0 AND COALESCE(c.qty, 0) > 0
+      ) AS restocked_count,
+      (
+        SELECT COALESCE(SUM(c.value), 0) FROM cur c
+      ) - (
+        SELECT COALESCE(SUM(ib.value), 0) FROM inventory_balances ib
+        JOIN previous p ON p.snapshot_id = ib.snapshot_id
+      ) AS value_change
+    `,
+    [categoryCode]
+  );
+  const r = rows[0];
+  if (!r?.previous_at) {
+    return { hasPrevious: false as const };
+  }
+  return {
+    hasPrevious: true as const,
+    latest_at: r.latest_at as Date,
+    previous_at: r.previous_at as Date,
+    new_out_count: Number(r.new_out_count),
+    restocked_count: Number(r.restocked_count),
+    value_change: Number(r.value_change),
+  };
 }

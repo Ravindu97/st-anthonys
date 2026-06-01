@@ -33,6 +33,7 @@ export function InventoryExplorer({
   const view = (searchParams.get('view') === 'grouped' ? 'grouped' : 'table') as
     | 'table'
     | 'grouped';
+  const dataIssues = searchParams.get('dataIssues') === 'variance' ? 'variance' : undefined;
 
   const [searchInput, setSearchInput] = useState(q);
   const [items, setItems] = useState<InventoryItemRow[]>([]);
@@ -51,10 +52,11 @@ export function InventoryExplorer({
     if (group) params.set('group', group);
     if (status && status !== 'all') params.set('status', status);
     if (sort) params.set('sort', sort);
+    if (dataIssues) params.set('dataIssues', dataIssues);
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
     return params.toString();
-  }, [q, group, status, sort, page, pageSize]);
+  }, [q, group, status, sort, dataIssues, page, pageSize]);
 
   const exportParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -62,8 +64,9 @@ export function InventoryExplorer({
     if (group) params.set('group', group);
     if (status && status !== 'all') params.set('status', status);
     if (sort) params.set('sort', sort);
+    if (dataIssues) params.set('dataIssues', dataIssues);
     return params.toString();
-  }, [q, group, status, sort]);
+  }, [q, group, status, sort, dataIssues]);
 
   const filterQueryForGroups = useMemo(() => {
     const params = new URLSearchParams();
@@ -80,6 +83,7 @@ export function InventoryExplorer({
         if (value === null || value === '') params.delete(key);
         else params.set(key, value);
       }
+      if (!params.has('tab')) params.set('tab', 'stock');
       router.replace(`/inventory/${vendorSlug}?${params.toString()}`, {
         scroll: false,
       });
@@ -129,8 +133,15 @@ export function InventoryExplorer({
 
   const clearFilters = () => {
     setSearchInput('');
-    router.replace(`/inventory/${vendorSlug}`, { scroll: false });
+    router.replace(`/inventory/${vendorSlug}?tab=stock`, { scroll: false });
   };
+
+  const statusFilter =
+    dataIssues === 'variance'
+      ? 'variance'
+      : status === 'low_stock' || status === 'out_of_stock'
+        ? status
+        : 'all';
 
   return (
     <div className="space-y-4">
@@ -139,8 +150,14 @@ export function InventoryExplorer({
         onSearchChange={setSearchInput}
         group={group}
         onGroupChange={(v) => updateParams({ group: v || null, page: '1' })}
-        status={status}
-        onStatusChange={(v) => updateParams({ status: v === 'all' ? null : v, page: '1' })}
+        status={statusFilter}
+        onStatusChange={(v) =>
+          updateParams({
+            status: v === 'all' || v === 'variance' ? null : v,
+            dataIssues: v === 'variance' ? 'variance' : null,
+            page: '1',
+          })
+        }
         sort={sort}
         onSortChange={(v) => updateParams({ sort: v, page: '1' })}
         pageSize={pageSize}

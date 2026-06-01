@@ -7,6 +7,8 @@ export function parseInventorySearchParams(
   const pageSize = parseInt(searchParams.get('pageSize') ?? '50', 10);
   const status = searchParams.get('status') as StockStatus | null;
 
+  const dataIssues = searchParams.get('dataIssues');
+
   return {
     q: searchParams.get('q') ?? undefined,
     group: searchParams.get('group') ?? undefined,
@@ -17,6 +19,7 @@ export function parseInventorySearchParams(
     sort: searchParams.get('sort') ?? 'value_desc',
     page: Number.isFinite(page) ? page : 1,
     pageSize: Number.isFinite(pageSize) ? pageSize : 50,
+    dataIssues: dataIssues === 'variance' ? 'variance' : undefined,
   };
 }
 

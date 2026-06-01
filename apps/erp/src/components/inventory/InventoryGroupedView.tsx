@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import { formatLkr } from '@/lib/format';
+import { vendorInventoryUrl } from '@/lib/inventory-url';
 import { InventoryDataTable } from './InventoryDataTable';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import type { GroupRollup, InventoryItemRow } from './types';
@@ -33,6 +35,7 @@ export function InventoryGroupedView({
       setLoadingGroup(groupName);
       const params = new URLSearchParams(filterQuery);
       params.set('group', groupName);
+      params.set('sort', sort);
       params.set('pageSize', '200');
       params.set('page', '1');
       try {
@@ -50,7 +53,7 @@ export function InventoryGroupedView({
         setLoadingGroup(null);
       }
     },
-    [vendorSlug, filterQuery]
+    [vendorSlug, filterQuery, sort]
   );
 
   const toggle = (groupName: string) => {
@@ -103,6 +106,17 @@ export function InventoryGroupedView({
                   {Number(g.item_count)} SKUs ·{' '}
                   {Number(g.total_quantity).toLocaleString()} units
                 </p>
+                <Link
+                  href={vendorInventoryUrl(vendorSlug, {
+                    group: g.group_name,
+                    sort: 'value_desc',
+                    tab: 'stock',
+                  })}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-1 inline-block text-xs font-medium text-brand-blue-600 hover:underline"
+                >
+                  View all in table →
+                </Link>
               </div>
               <div className="text-right">
                 <p className="font-mono text-sm font-bold text-slate-900">

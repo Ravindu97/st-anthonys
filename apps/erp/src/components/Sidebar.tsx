@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const nav = [
   { href: '/', label: 'Dashboard', short: 'Home', icon: HomeIcon },
   { href: '/inventory', label: 'Inventory hub', short: 'Stock', icon: BoxesIcon },
+  { href: '/inventory/alerts', label: 'Alert center', short: 'Alerts', icon: AlertIcon },
 ] as const;
 
 type SidebarProps = {
@@ -14,6 +15,18 @@ type SidebarProps = {
   onCloseMobile: () => void;
   onToggleCollapse: () => void;
 };
+
+function isNavItemActive(pathname: string, href: string) {
+  if (href === '/') return pathname === '/';
+  if (href === '/inventory/alerts') return pathname.startsWith('/inventory/alerts');
+  if (href === '/inventory') {
+    return (
+      pathname === '/inventory' ||
+      (pathname.startsWith('/inventory/') && !pathname.startsWith('/inventory/alerts'))
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function Sidebar({
   collapsed,
@@ -63,11 +76,7 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto p-2">
         <div className="space-y-1">
           {nav.map((item) => {
-            const active =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
+            const active = isNavItemActive(pathname, item.href);
             const Icon = item.icon;
             return (
               <Link
@@ -143,6 +152,19 @@ function HomeIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={1.75}
         d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10"
+      />
+    </svg>
+  );
+}
+
+function AlertIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
       />
     </svg>
   );
