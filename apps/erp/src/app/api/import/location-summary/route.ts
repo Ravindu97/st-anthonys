@@ -7,13 +7,13 @@ import {
 } from '@st-anthonys/import';
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { checkImportAuth } from '@/lib/import-auth';
+import { requirePermission } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const denied = checkImportAuth(request);
-  if (denied) return denied;
+  const auth = await requirePermission(request, 'import:write', { requireDb: true });
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const contentType = request.headers.get('content-type') ?? '';

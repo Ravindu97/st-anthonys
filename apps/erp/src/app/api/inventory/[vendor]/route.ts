@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth';
 import {
   getGroupRollupsForVendor,
   resolveVendorCode,
@@ -11,6 +12,9 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ vendor: string }> }
 ) {
+  const auth = await requirePermission(req, 'inventory:read');
+  if (auth instanceof NextResponse) return auth;
+
   const { vendor } = await params;
   const vendorMeta = await resolveVendorCode(vendor);
   if (!vendorMeta) {

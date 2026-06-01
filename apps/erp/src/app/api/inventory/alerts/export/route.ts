@@ -1,6 +1,10 @@
+import { NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth';
 import { searchCrossVendorAlerts } from '@/lib/inventory-search';
 
 export async function GET(request: Request) {
+  const auth = await requirePermission(request, 'inventory:read');
+  if (auth instanceof NextResponse) return auth;
   const { searchParams } = new URL(request.url);
   const tabParam = searchParams.get('tab') ?? 'all';
   const tab = ['all', 'low', 'out', 'variance', 'new_outs'].includes(tabParam)

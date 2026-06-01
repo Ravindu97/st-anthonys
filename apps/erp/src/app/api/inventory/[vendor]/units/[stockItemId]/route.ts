@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { checkImportAuth } from '@/lib/import-auth';
+import { requirePermission } from '@/lib/auth';
 import { patchUnitBalance } from '@/lib/inventory-adjustments';
 
 export const dynamic = 'force-dynamic';
@@ -8,8 +8,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ vendor: string; stockItemId: string }> }
 ) {
-  const denied = checkImportAuth(request);
-  if (denied) return denied;
+  const auth = await requirePermission(request, 'inventory:adjust', {
+    requireDb: true,
+  });
+  if (auth instanceof NextResponse) return auth;
 
   const { vendor, stockItemId } = await params;
 

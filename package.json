@@ -12,6 +12,9 @@
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/migrate.js --seed",
     "db:setup": "node scripts/migrate.js && node scripts/migrate.js --seed",
+    "user:create": "node scripts/create-app-user.js",
+    "user:list": "node scripts/list-app-users.js",
+    "user:remove": "node scripts/remove-app-user.js",
     "import:location-summary": "node scripts/import-location-summary.js",
     "import:swisstek": "node scripts/import-location-summary.js \"./reference/swisstek items list.csv\" SWISSTEK SWISSTEK",
     "validate:orange": "node scripts/validate-orange-import.js",
@@ -22,6 +25,7 @@
   },
   "dependencies": {
     "@st-anthonys/import": "*",
+    "bcryptjs": "^3.0.2",
     "pg": "^8.16.0"
   }
 }

@@ -1,11 +1,17 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
 import { ImportLocationSummaryForm } from '@/components/import/ImportLocationSummaryForm';
+import { getSessionFromCookies, isAdminRole } from '@/lib/auth';
 import { listImportRuns } from '@/lib/import-runs';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImportPage() {
+  const session = await getSessionFromCookies();
+  if (!session || !isAdminRole(session.role)) {
+    redirect('/inventory?error=forbidden');
+  }
   let runs: Awaited<ReturnType<typeof listImportRuns>> = [];
   try {
     runs = await listImportRuns(10);

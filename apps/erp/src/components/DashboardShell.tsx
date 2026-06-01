@@ -1,14 +1,21 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Sidebar } from '@/components/Sidebar';
+import type { Role } from '@/lib/auth/permissions';
 
 const STORAGE_KEY = 'erp-sidebar-collapsed';
 
+type MeUser = { id: string; email: string; role: Role };
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<MeUser | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     try {
@@ -24,6 +31,30 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       document.body.style.overflow = '';
     };
   }, [mobileOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.user) setUser(data.user);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onSignOut = useCallback(async () => {
+    setSigningOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } finally {
+      setSigningOut(false);
+    }
+  }, [router]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -71,9 +102,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <BrandLogo compact />
           </div>
           <div className="flex shrink-0 items-center gap-2 text-sm text-white/90">
-            <span className="hidden max-w-[8rem] truncate sm:inline md:max-w-none">
-              ST. Anthonys Distributor
-            </span>
+            {user && (
+              <div className="hidden items-center gap-2 sm:flex">
+                <span className="max-w-[10rem] truncate text-xs text-white/90">
+                  {user.email}
+                </span>
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                  {user.role}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={signingOut}
+              className="rounded-md border border-white/25 px-2 py-1 text-xs font-medium text-white hover:bg-white/10 disabled:opacity-60"
+            >
+              {signingOut ? '…' : 'Sign out'}
+            </button>
             <span className="rounded-md bg-white/15 px-2 py-1 font-mono text-[10px] sm:text-xs">
               FY 26
             </span>

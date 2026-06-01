@@ -14,6 +14,9 @@ npm run validate:orange
 npm run validate:swisstek
 
 cp apps/erp/.env.local.example apps/erp/.env.local
+# Set SESSION_SECRET (see apps/erp/.env.local.example), then create users:
+npm run user:create -- --email admin@st-anthonys.local --password 'your-strong-password' --role admin
+npm run user:create -- --email viewer@st-anthonys.local --password 'your-strong-password' --role viewer
 npm run dev:erp        # http://localhost:3000
 ```
 
@@ -78,7 +81,52 @@ npm run import:location-summary -- --dry-run ./reference/orange\ product\ list\ 
 npm run import:location-summary -- ./reference/orange\ product\ list\ 3.csv ORANGE
 ```
 
-**ERP:** Dashboard → **Import**, or `POST /api/import/location-summary` (multipart CSV). Optional `IMPORT_API_KEY` in `apps/erp/.env.local` sends `x-import-api-key` on import/adjustment routes.
+## Authentication and roles
+
+The ERP requires sign-in. Users have one of two roles:
+
+| Role | Access |
+|------|--------|
+| **admin** | Full dashboard, CSV import (`/import`), balance adjustments |
+| **viewer** | Read-only dashboard, inventory, alerts, exports |
+
+**Local dev sign-in:** http://localhost:3000/login
+
+**Default local accounts** (local development only — change or remove before production):
+
+| Email | Role | Password |
+|-------|------|----------|
+| `admin@st-anthonys.local` | admin — import, adjustments | `5KbTMbFWjvNkGWRbthu3LC1C` |
+| `viewer@st-anthonys.local` | viewer — read-only | `ZLtnJvzQjyr6NrzdSTx4qJmI` |
+
+**User management** (repo root; uses `DATABASE_URL` from the environment or default local Postgres):
+
+```bash
+# List users
+npm run user:list
+
+# Create
+npm run user:create -- --email admin@st-anthonys.local --password 'your-strong-password' --role admin
+npm run user:create -- --email viewer@st-anthonys.local --password 'your-strong-password' --role viewer
+
+# Remove by email or id (sessions are deleted automatically)
+npm run user:remove -- --email someone@st-anthonys.local
+npm run user:remove -- --id 6701192d-f9ca-4121-acc1-9ead3d82a736
+```
+
+Generate `SESSION_SECRET` (≥32 characters):
+
+```bash
+openssl rand -base64 32
+```
+
+Set it in `apps/erp/.env.local`. Sessions last `SESSION_TTL_DAYS` (default 7).
+
+**CLI imports** (`npm run import:location-summary`) connect to Postgres directly and are not gated by web login — restrict database access in production.
+
+**ERP import API:** Sign in as admin, or set optional `IMPORT_API_KEY` and send header `x-import-api-key` for scripted imports.
+
+**ERP:** Inventory hub → **Import CSV** (admin only), or `POST /api/import/location-summary` (multipart CSV).
 
 **Single-unit balance update** (latest vendor snapshot only; does not create new items):
 

@@ -59,7 +59,10 @@ export function ImportLocationSummaryForm() {
       const data = await res.json();
       if (!res.ok) {
         setFailure({
-          error: data.error ?? 'Import failed',
+          error:
+            res.status === 403
+              ? 'Import is restricted to admin users.'
+              : (data.error ?? 'Import failed'),
           code: data.code,
           details: data.details ?? data.report,
         });

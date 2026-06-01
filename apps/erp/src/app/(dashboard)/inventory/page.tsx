@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getSessionFromCookies, isAdminRole } from '@/lib/auth';
 import { getInventoryHubSummary } from '@/lib/inventory-search';
 import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
 import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
@@ -27,7 +28,14 @@ function staleDays(imported_at: Date | string) {
   );
 }
 
-export default async function InventoryHubPage() {
+type PageProps = { searchParams: Promise<{ error?: string }> };
+
+export default async function InventoryHubPage({ searchParams }: PageProps) {
+  const session = await getSessionFromCookies();
+  const isAdmin = session ? isAdminRole(session.role) : false;
+  const params = await searchParams;
+  const forbidden = params.error === 'forbidden';
+
   let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
   let recentImport: Awaited<ReturnType<typeof listImportRuns>>[number] | null = null;
   let error: string | null = null;
@@ -48,6 +56,12 @@ export default async function InventoryHubPage() {
 
   return (
     <div className="space-y-5">
+      {forbidden && (
+        <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Import is restricted to admin users.
+        </p>
+      )}
+
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
@@ -72,12 +86,14 @@ export default async function InventoryHubPage() {
             </p>
           )}
         </div>
-        <Link
-          href="/import"
-          className="rounded-lg border border-brand-blue-200 bg-brand-blue-50 px-3 py-2 text-sm font-medium text-brand-blue-700 hover:bg-brand-blue-100"
-        >
-          Import CSV
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/import"
+            className="rounded-lg border border-brand-blue-200 bg-brand-blue-50 px-3 py-2 text-sm font-medium text-brand-blue-700 hover:bg-brand-blue-100"
+          >
+            Import CSV
+          </Link>
+        )}
       </header>
 
       {error && (
