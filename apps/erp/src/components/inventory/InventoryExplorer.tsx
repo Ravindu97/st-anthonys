@@ -189,6 +189,7 @@ export function InventoryExplorer({
         <>
           <InventoryDataTable
             rows={items}
+            vendorSlug={vendorSlug}
             sort={sort}
             onSortChange={(v) => updateParams({ sort: v, page: '1' })}
           />

@@ -22,6 +22,7 @@ const AT_RISK_LINE_SQL = `(
 const LINE_VALUE_SQL = `COALESCE(v.value, v.quantity * v.rate, 0)`;
 
 export type InventoryItemRow = {
+  stock_item_id: string;
   stock_group_name: string;
   primary_sku: string | null;
   item_name: string;
@@ -322,6 +323,7 @@ export async function searchInventoryItems(
     `
     ${LATEST_SNAPSHOT_CTE}
     SELECT
+      v.stock_item_id,
       v.stock_group_name,
       v.primary_sku,
       v.item_name,

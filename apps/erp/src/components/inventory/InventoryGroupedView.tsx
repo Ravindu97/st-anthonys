@@ -137,7 +137,7 @@ export function InventoryGroupedView({
               <div className="border-t border-slate-100 bg-slate-50/30 p-2">
                 {loadingGroup === g.group_name && !items && <LoadingSkeleton />}
                 {items && items.length > 0 && (
-                  <InventoryDataTable rows={items} />
+                  <InventoryDataTable rows={items} vendorSlug={vendorSlug} />
                 )}
                 {items && items.length === 0 && (
                   <p className="px-4 py-6 text-center text-sm text-slate-500">

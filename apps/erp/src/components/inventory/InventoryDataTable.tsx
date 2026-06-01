@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
+import { unitDetailUrl } from '@/lib/inventory-url';
 import type { InventoryItemRow } from './types';
 
 function stockBadge(qty: number) {
@@ -71,11 +73,12 @@ function SortHeader({
 
 type Props = {
   rows: InventoryItemRow[];
+  vendorSlug: string;
   sort?: string;
   onSortChange?: (sort: string) => void;
 };
 
-export function InventoryDataTable({ rows, sort, onSortChange }: Props) {
+export function InventoryDataTable({ rows, vendorSlug, sort, onSortChange }: Props) {
   const skuActive = sort === 'sku_asc' || sort === 'sku_desc';
   const valueActive = sort === 'value_desc' || sort === 'value_asc';
   const qtyActive = sort === 'qty_desc' || sort === 'qty_asc';
@@ -124,22 +127,39 @@ export function InventoryDataTable({ rows, sort, onSortChange }: Props) {
           <tbody>
             {rows.map((row, i) => {
               const qty = Number(row.quantity ?? 0);
+              const unitHref = unitDetailUrl(vendorSlug, {
+                stockItemId: row.stock_item_id,
+                sku: row.primary_sku,
+              });
               return (
                 <tr
-                  key={`${row.primary_sku ?? row.item_name}-${i}`}
+                  key={row.stock_item_id}
                   className={`border-b border-slate-100/80 transition-colors hover:bg-brand-blue-50/40 ${
                     i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                   }`}
                 >
                   <td className="px-4 py-3">
-                    {row.primary_sku && (
-                      <span className="block font-mono text-xs font-semibold text-slate-600">
+                    {row.primary_sku ? (
+                      <Link
+                        href={unitHref}
+                        className="block font-mono text-xs font-semibold text-brand-blue-600 hover:underline"
+                      >
                         {row.primary_sku}
-                      </span>
+                      </Link>
+                    ) : (
+                      <Link
+                        href={unitHref}
+                        className="block font-mono text-xs font-semibold text-brand-blue-600 hover:underline"
+                      >
+                        View unit
+                      </Link>
                     )}
-                    <span className="font-semibold text-slate-900">
+                    <Link
+                      href={unitHref}
+                      className="font-semibold text-slate-900 hover:text-brand-blue-600 hover:underline"
+                    >
                       {row.item_name}
-                    </span>
+                    </Link>
                     <span className="mt-0.5 block w-fit rounded bg-brand-blue-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-brand-blue-700 uppercase">
                       {row.stock_group_name}
                     </span>

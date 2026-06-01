@@ -1,4 +1,5 @@
 export type InventoryItemRow = {
+  stock_item_id: string;
   stock_group_name: string;
   primary_sku: string | null;
   item_name: string;
