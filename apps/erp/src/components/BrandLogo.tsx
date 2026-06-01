@@ -1,8 +1,8 @@
 export function BrandLogo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
       <div
-        className={`grid grid-cols-2 gap-0.5 ${compact ? 'h-7 w-7' : 'h-9 w-9'}`}
+        className={`grid shrink-0 grid-cols-2 gap-0.5 ${compact ? 'h-7 w-7' : 'h-9 w-9'}`}
         aria-hidden
       >
         <span className="bg-white" />
@@ -10,16 +10,16 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
         <span className="bg-emerald-500" />
         <span className="bg-white" />
       </div>
-      {!compact && (
-        <div>
-          <p className="font-display text-sm font-semibold leading-tight text-white">
-            St. Anthony&apos;s
-          </p>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-brand-blue-100">
+      <div className={compact ? 'hidden min-w-0 sm:block' : 'min-w-0'}>
+        <p className="truncate font-display text-sm font-semibold leading-tight text-white">
+          St. Anthony&apos;s
+        </p>
+        {!compact && (
+          <p className="hidden text-[10px] font-medium tracking-wider text-brand-blue-100 uppercase xs:block sm:block">
             Smart Solutions ERP
           </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

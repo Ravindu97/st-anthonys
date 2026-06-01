@@ -24,7 +24,7 @@ export function PaginationBar({ page, pageSize, totalCount, onPageChange }: Prop
         <span className="font-mono font-semibold">{to}</span> of{' '}
         <span className="font-mono font-semibold">{totalCount.toLocaleString()}</span>
       </p>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 overflow-x-auto pb-1">
         <button
           type="button"
           disabled={page <= 1}

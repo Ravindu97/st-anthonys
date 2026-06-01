@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import { MetricCardMoney } from '@/components/MetricCard';
+import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
+import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
 import { InventoryExplorer } from '@/components/inventory/InventoryExplorer';
 import { LoadingSkeleton } from '@/components/inventory/LoadingSkeleton';
 import {
@@ -40,13 +41,20 @@ export default async function VendorInventoryPage({
     getVendorKpis(vendorMeta.code),
   ]);
 
+  const inStock =
+    Number(kpis.sku_count) - Number(kpis.low_stock) - Number(kpis.out_of_stock);
+
   return (
     <div className="space-y-6">
+      <PageBreadcrumbs
+        items={[
+          { label: 'Inventory hub', href: '/inventory' },
+          { label: vendorMeta.name },
+        ]}
+      />
+
       <div>
-        <p className="font-mono text-xs font-semibold tracking-wider text-brand-blue-600 uppercase">
-          {vendorMeta.code}
-        </p>
-        <h1 className="font-display text-2xl font-semibold text-slate-900">
+        <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
           {vendorMeta.name}
         </h1>
         {meta && (
@@ -57,18 +65,35 @@ export default async function VendorInventoryPage({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCardMoney label="Stock value" amount={kpis.total_value} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-12">
         <MetricCardMoney
-          label="Low stock SKUs"
-          amount={kpis.low_stock}
-          accent="gold"
-          sub="Fewer than 10 units"
+          label="Stock value"
+          amount={kpis.total_value}
+          className="col-span-2 lg:col-span-4"
         />
-        <MetricCardMoney
-          label="Out of stock lines"
-          amount={kpis.out_of_stock}
+        <MetricCardCount
+          label="SKU lines"
+          count={kpis.sku_count}
+          className="col-span-1 lg:col-span-2"
+        />
+        <MetricCardCount
+          label="In stock"
+          count={Math.max(0, inStock)}
+          sub="10+ units"
+          className="col-span-1 lg:col-span-2"
+        />
+        <MetricCardCount
+          label="Low stock"
+          count={kpis.low_stock}
           accent="gold"
+          sub="1–9 units"
+          className="col-span-1 lg:col-span-2"
+        />
+        <MetricCardCount
+          label="Out of stock"
+          count={kpis.out_of_stock}
+          accent="gold"
+          className="col-span-1 lg:col-span-2"
         />
       </div>
 

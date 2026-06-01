@@ -132,11 +132,11 @@ export function InventoryToolbar({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-3">
         <select
           value={group}
           onChange={(e) => onGroupChange(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none lg:max-w-xs"
           aria-label="Stock group"
         >
           <option value="">All stock groups</option>
@@ -150,7 +150,7 @@ export function InventoryToolbar({
         <select
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none lg:w-auto"
           aria-label="Stock status"
         >
           {STATUS_OPTIONS.map((o) => (
@@ -163,7 +163,7 @@ export function InventoryToolbar({
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none lg:w-auto"
           aria-label="Sort by"
         >
           {SORT_OPTIONS.map((o) => (
@@ -176,7 +176,7 @@ export function InventoryToolbar({
         <select
           value={pageSize}
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue-500 focus:outline-none lg:w-auto"
           aria-label="Rows per page"
         >
           {[25, 50, 100].map((n) => (

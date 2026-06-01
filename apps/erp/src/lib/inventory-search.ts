@@ -58,15 +58,15 @@ function parseSort(sort?: string): { column: string; direction: 'ASC' | 'DESC' }
   return { column, direction };
 }
 
-function buildStatusClause(status: StockStatus, paramIndex: number): string {
+function buildStatusClause(status: StockStatus): string {
   if (status === 'out_of_stock') {
-    return `AND COALESCE(v.quantity, 0) <= 0`;
+    return ` AND COALESCE(v.quantity, 0) <= 0`;
   }
   if (status === 'low_stock') {
-    return `AND COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10`;
+    return ` AND COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10`;
   }
   if (status === 'in_stock') {
-    return `AND COALESCE(v.quantity, 0) >= 10`;
+    return ` AND COALESCE(v.quantity, 0) >= 10`;
   }
   return '';
 }
@@ -97,7 +97,7 @@ function buildFilterClause(
   }
 
   if (params.status && params.status !== 'all') {
-    sql += buildStatusClause(params.status, idx);
+    sql += buildStatusClause(params.status);
   }
 
   return { sql, values };
@@ -183,6 +183,11 @@ export async function getActiveVendors() {
       LOWER(l.code) AS slug,
       COUNT(ib.id)::int AS sku_count,
       COALESCE(SUM(ib.value), 0) AS total_value,
+      COUNT(*) FILTER (
+        WHERE COALESCE(ib.quantity, 0) > 0 AND COALESCE(ib.quantity, 0) < 10
+      )::int AS low_stock,
+      COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) <= 0)::int AS out_of_stock,
+      COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) >= 10)::int AS in_stock,
       MAX(l.imported_at) AS imported_at
     FROM latest l
     JOIN inventory_balances ib ON ib.snapshot_id = l.snapshot_id
@@ -196,8 +201,24 @@ export async function getActiveVendors() {
     slug: string;
     sku_count: number;
     total_value: string;
+    low_stock: number;
+    out_of_stock: number;
+    in_stock: number;
     imported_at: Date;
   }[];
+}
+
+export async function getInventoryHubSummary() {
+  const vendors = await getActiveVendors();
+  return {
+    vendor_count: vendors.length,
+    sku_count: vendors.reduce((s, v) => s + Number(v.sku_count), 0),
+    total_value: vendors.reduce((s, v) => s + Number(v.total_value), 0),
+    low_stock: vendors.reduce((s, v) => s + Number(v.low_stock), 0),
+    out_of_stock: vendors.reduce((s, v) => s + Number(v.out_of_stock), 0),
+    in_stock: vendors.reduce((s, v) => s + Number(v.in_stock), 0),
+    vendors,
+  };
 }
 
 export async function getVendorKpis(

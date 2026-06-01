@@ -27,13 +27,15 @@ function stockBadge(qty: number) {
 export function InventoryDataTable({ rows }: { rows: InventoryItemRow[] }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="max-h-[min(70vh,720px)] overflow-auto">
-        <table className="min-w-full text-left text-sm">
+      <div className="max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+        <table className="min-w-[640px] w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
             <tr className="border-b border-slate-100">
               <th className="px-4 py-3 font-medium text-slate-500">Product</th>
               <th className="px-4 py-3 font-medium text-slate-500">Qty</th>
-              <th className="px-4 py-3 font-medium text-slate-500">Rate</th>
+              <th className="hidden px-4 py-3 font-medium text-slate-500 md:table-cell">
+                Rate
+              </th>
               <th className="px-4 py-3 font-medium text-slate-500">Status</th>
               <th className="px-4 py-3 text-right font-medium text-slate-500">
                 Value
@@ -67,7 +69,7 @@ export function InventoryDataTable({ rows }: { rows: InventoryItemRow[] }) {
                     <strong>{qty.toLocaleString()}</strong>{' '}
                     <span className="text-xs text-slate-400">{row.unit_code}</span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-slate-600 tabular-nums">
+                  <td className="hidden px-4 py-3 font-mono text-slate-600 tabular-nums md:table-cell">
                     {row.rate != null ? formatLkr(row.rate) : '—'}
                   </td>
                   <td className="px-4 py-3">{stockBadge(qty)}</td>

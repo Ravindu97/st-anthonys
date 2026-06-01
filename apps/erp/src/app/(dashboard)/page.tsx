@@ -1,25 +1,18 @@
 import Link from 'next/link';
-import { MetricCardMoney } from '@/components/MetricCard';
-import { formatLkr } from '@/lib/format';
-import { getActiveVendors } from '@/lib/inventory-search';
+import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
+import { getInventoryHubSummary } from '@/lib/inventory-search';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  let vendors: Awaited<ReturnType<typeof getActiveVendors>> = [];
+  let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
   let error: string | null = null;
 
   try {
-    vendors = await getActiveVendors();
+    summary = await getInventoryHubSummary();
   } catch (e) {
     error = e instanceof Error ? e.message : 'Database unavailable';
   }
-
-  const totalValue = vendors.reduce(
-    (s, v) => s + Number(v.total_value),
-    0
-  );
-  const totalSkus = vendors.reduce((s, v) => s + Number(v.sku_count), 0);
 
   return (
     <div className="space-y-8">
@@ -40,54 +33,45 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCardMoney
-          label="Total stock value (imported)"
-          amount={totalValue}
-          sub={`${vendors.length} active locations`}
-        />
-        <MetricCardMoney
-          label="SKU lines on hand"
-          amount={totalSkus}
-          sub="Distinct items with balances"
-          accent="gold"
-        />
-        <MetricCardMoney
-          label="Vendors synced"
-          amount={vendors.length}
-          sub="ORANGE, SWISSTEK + more"
-        />
-      </div>
+      {summary && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCardMoney
+              label="Total stock value"
+              amount={summary.total_value}
+              sub={`${summary.vendor_count} active vendors`}
+            />
+            <MetricCardCount
+              label="SKU lines"
+              count={summary.sku_count}
+              sub="Across all vendors"
+            />
+            <MetricCardCount
+              label="Low stock SKUs"
+              count={summary.low_stock}
+              accent="gold"
+              sub="Under 10 units"
+            />
+            <MetricCardCount
+              label="Out of stock"
+              count={summary.out_of_stock}
+              accent="gold"
+            />
+          </div>
 
-      <section>
-        <h2 className="font-display text-lg font-semibold text-slate-900">
-          Vendor locations
-        </h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {vendors.map((v) => (
+          <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+            <h2 className="font-display text-lg font-semibold text-slate-900">
+              Inventory hub
+            </h2>
             <Link
-              key={v.code}
-              href={`/inventory/${v.slug}`}
-              className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-blue-200 hover:shadow-md"
+              href="/inventory"
+              className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-display font-semibold text-slate-900 group-hover:text-brand-blue-600">
-                    {v.name}
-                  </p>
-                  <p className="text-xs text-slate-500">{v.location_name}</p>
-                </div>
-                <span className="font-mono text-sm font-bold text-brand-blue-600">
-                  {formatLkr(v.total_value)}
-                </span>
-              </div>
-              <p className="mt-3 font-mono text-xs text-slate-400">
-                {Number(v.sku_count).toLocaleString()} SKUs
-              </p>
+              View vendors →
             </Link>
-          ))}
-        </div>
-      </section>
+          </section>
+        </>
+      )}
     </div>
   );
 }

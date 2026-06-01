@@ -1,79 +1,106 @@
-import Link from 'next/link';
-import { getActiveVendors } from '@/lib/inventory-search';
-import { formatLkr } from '@/lib/format';
-import { VendorHubSearch } from '@/components/inventory/VendorHubSearch';
+import { getInventoryHubSummary } from '@/lib/inventory-search';
+import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
+import { VendorHubClient } from '@/components/inventory/VendorHubClient';
 
 export const dynamic = 'force-dynamic';
 
-export default async function InventoryIndexPage() {
-  let vendors: Awaited<ReturnType<typeof getActiveVendors>> = [];
+function latestImportDate(vendors: { imported_at: string | Date }[]) {
+  if (vendors.length === 0) return null;
+  const latest = vendors.reduce(
+    (max, v) => Math.max(max, new Date(v.imported_at).getTime()),
+    0
+  );
+  return new Date(latest).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+export default async function InventoryHubPage() {
+  let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
   let error: string | null = null;
 
   try {
-    vendors = await getActiveVendors();
+    summary = await getInventoryHubSummary();
   } catch (e) {
-    error = e instanceof Error ? e.message : 'Could not load vendors';
+    error = e instanceof Error ? e.message : 'Could not load inventory';
   }
+
+  const vendors = summary?.vendors ?? [];
+  const lastImport = summary ? latestImportDate(vendors) : null;
+  const alertTotal = summary
+    ? Number(summary.low_stock) + Number(summary.out_of_stock)
+    : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-slate-900">
-            Inventory
+          <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
+            Inventory hub
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Select a vendor to search, filter, and export stock from your latest
-            Tally import.
-          </p>
+          {summary && (
+            <p className="mt-1 font-mono text-sm text-slate-500">
+              {summary.vendor_count} vendors ·{' '}
+              {Number(summary.sku_count).toLocaleString()} SKUs
+              {lastImport ? ` · Updated ${lastImport}` : ''}
+            </p>
+          )}
         </div>
-        <VendorHubSearch />
-      </div>
+        {summary && alertTotal > 0 && (
+          <span className="rounded-full border border-brand-gold-200 bg-brand-gold-50 px-3 py-1 text-sm font-medium text-brand-gold-800">
+            {alertTotal.toLocaleString()} lines need attention
+          </span>
+        )}
+      </header>
 
       {error && (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>
       )}
 
+      {summary && (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-12">
+          <MetricCardMoney
+            label="Total stock value"
+            amount={summary.total_value}
+            className="xl:col-span-4"
+          />
+          <MetricCardCount
+            label="Vendors"
+            count={summary.vendor_count}
+            className="xl:col-span-2"
+          />
+          <MetricCardCount
+            label="SKU lines"
+            count={summary.sku_count}
+            className="xl:col-span-2"
+          />
+          <MetricCardCount
+            label="Low stock"
+            count={summary.low_stock}
+            accent="gold"
+            sub="Under 10 units"
+            className="xl:col-span-2"
+          />
+          <MetricCardCount
+            label="Out of stock"
+            count={summary.out_of_stock}
+            accent="gold"
+            className="xl:col-span-2"
+          />
+        </div>
+      )}
+
       {vendors.length === 0 && !error && (
         <p className="text-sm text-slate-500">
-          No imported inventory yet. Run a Location Summary import from the project
-          root.
+          No inventory imported yet. Run a Location Summary import, then refresh.
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {vendors.map((v) => (
-          <Link
-            key={v.code}
-            href={`/inventory/${v.slug}`}
-            data-vendor-name={v.name.toLowerCase()}
-            data-vendor-location={v.location_name.toLowerCase()}
-            className="vendor-card group rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-brand-blue-300 hover:shadow-md"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-display text-lg font-semibold text-slate-900 group-hover:text-brand-blue-600">
-                  {v.name}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">{v.location_name}</p>
-              </div>
-              <span className="rounded-full bg-brand-blue-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-brand-blue-700">
-                {v.code}
-              </span>
-            </div>
-            <p className="mt-4 font-mono text-lg font-bold text-slate-900">
-              {formatLkr(v.total_value)}
-            </p>
-            <p className="mt-1 font-mono text-xs text-slate-400">
-              {Number(v.sku_count).toLocaleString()} SKUs · Updated{' '}
-              {new Date(v.imported_at).toLocaleDateString('en-GB')}
-            </p>
-            <p className="mt-3 text-xs font-medium text-brand-blue-600">
-              Open inventory →
-            </p>
-          </Link>
-        ))}
-      </div>
+      {vendors.length > 0 && (
+        <VendorHubClient vendors={vendors} totalValue={summary?.total_value} />
+      )}
     </div>
   );
 }
