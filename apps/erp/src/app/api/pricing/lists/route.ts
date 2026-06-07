@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const result = await listPriceLists(companyId, {
     page: parseInt(searchParams.get('page') ?? '1', 10),
+    levelName: searchParams.get('level') ?? undefined,
   });
   return NextResponse.json({ lists: result.items, ...result });
 }

@@ -45,6 +45,7 @@ Loading a page once is not enough. Exercise the full user path:
 | POS counter | Open session → search SKU → attach customer → reprice cart → **mock payment gateway** (card tap / cash tender / account charge) → complete sale → insufficient-stock confirm → View sale / Print receipt → Z-report → close session. |
 | Sales hub (`/orders`) | **Counter (POS)** tab lists TXN rows → print receipt; **Quotes** → create/print; SO workflow: confirm → pick → **mock payment on collect** (cash/card/account) → collected; search/date filters. |
 | Customers | `/customers` search by name/code/phone → **Add customer** (auto `CUST-#####` code) → detail shows address, terms, sales summary, recent SO/TXN links → **Edit customer**; POS picker shows price tier + office link when no match (no cashier create). |
+| Pricing | `/pricing` filter by level → **Current** badge on active list → import CSV with **Preview** + error table → `/pricing/[id]` search SKU, net price column → **Add/Edit price** exception (admin) → POS verifies rate for customer tier. |
 
 If auth blocks automated checks, run the query/API path directly (e.g. call the lib function against the dev DB) and tell the user what to click to confirm in the browser.
 

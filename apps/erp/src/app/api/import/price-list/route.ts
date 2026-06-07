@@ -17,6 +17,7 @@ export async function POST(request: Request) {
   const priceLevel = (form.get('priceLevel') as string) ?? 'Retail';
   const categoryCode = (form.get('categoryCode') as string) ?? 'ORANGE';
   const dryRun = form.get('dryRun') === 'true';
+  const applicableFrom = (form.get('applicableFrom') as string) || undefined;
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'CSV file required' }, { status: 400 });
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       companyId,
       priceLevelName: priceLevel,
       categoryCode,
+      applicableFrom,
       dryRun,
     });
     return NextResponse.json(result);

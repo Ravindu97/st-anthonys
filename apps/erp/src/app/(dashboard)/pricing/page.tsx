@@ -1,6 +1,15 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
-import { TablePagination } from '@/components/TablePagination';
 import { PriceListImportForm } from '@/components/pricing/PriceListImportForm';
+import {
+  PricingLevelCards,
+  PricingSearchToolbar,
+} from '@/components/pricing/PricingSearchToolbar';
+import { TablePagination } from '@/components/TablePagination';
+import { hasPermission } from '@/lib/auth/permissions';
+import { getSessionFromCookies } from '@/lib/auth/session';
 import { listPriceLevels, listPriceLists } from '@/lib/pricing';
 import { getDefaultCompanyId } from '@/lib/company';
 
@@ -9,13 +18,23 @@ export const dynamic = 'force-dynamic';
 export default async function PricingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; level?: string }>;
 }) {
+  const session = await getSessionFromCookies();
+  if (!session || !hasPermission(session.role, 'pricing:read')) {
+    redirect('/');
+  }
+
+  const canWrite = hasPermission(session.role, 'pricing:write');
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1));
   const companyId = await getDefaultCompanyId();
   const [lists, levels] = await Promise.all([
-    listPriceLists(companyId, { page, pageSize: 25 }),
+    listPriceLists(companyId, {
+      page,
+      pageSize: 25,
+      levelName: params.level,
+    }),
     listPriceLevels(companyId),
   ]);
 
@@ -32,19 +51,13 @@ export default async function PricingPage({
         </p>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        {levels.map((l) => (
-          <div
-            key={l.id}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-          >
-            <p className="text-xs text-slate-500">Price level</p>
-            <p className="font-medium text-slate-900">{l.name}</p>
-          </div>
-        ))}
-      </section>
+      <PricingLevelCards levels={levels} activeLevel={params.level ?? ''} />
 
-      <PriceListImportForm levels={levels.map((l) => l.name)} />
+      <Suspense fallback={null}>
+        <PricingSearchToolbar levels={levels} canWrite={canWrite} />
+      </Suspense>
+
+      {canWrite && <PriceListImportForm levels={levels.map((l) => l.name)} />}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-full text-sm">
@@ -58,8 +71,20 @@ export default async function PricingPage({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {lists.items.map((pl) => (
-              <tr key={pl.id}>
-                <td className="px-4 py-2">{pl.price_level_name}</td>
+              <tr key={pl.id} className="hover:bg-slate-50">
+                <td className="px-4 py-2">
+                  <Link
+                    href={`/pricing/${pl.id}`}
+                    className="text-brand-blue-600 hover:underline"
+                  >
+                    {pl.price_level_name}
+                  </Link>
+                  {pl.is_current && (
+                    <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      Current
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2 text-slate-600">
                   {pl.category_name ?? pl.group_name ?? pl.scope_type}
                 </td>
@@ -70,13 +95,25 @@ export default async function PricingPage({
           </tbody>
         </table>
         {lists.items.length === 0 && (
-          <p className="px-4 py-6 text-sm text-slate-500">No price lists yet. Import a CSV.</p>
+          <div className="px-4 py-8 text-center">
+            <p className="text-sm text-slate-500">
+              {params.level
+                ? `No price lists for ${params.level}.`
+                : 'No price lists yet.'}
+            </p>
+            {canWrite && !params.level && (
+              <p className="mt-2 text-xs text-slate-500">
+                Use the import form above to load your first Tally price list CSV.
+              </p>
+            )}
+          </div>
         )}
         <TablePagination
           basePath="/pricing"
           page={lists.page}
           pageSize={lists.pageSize}
           totalCount={lists.totalCount}
+          searchParams={{ level: params.level }}
         />
       </div>
     </div>

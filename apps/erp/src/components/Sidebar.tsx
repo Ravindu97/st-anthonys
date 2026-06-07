@@ -16,7 +16,7 @@ const nav: Array<{
   { href: '/inventory', label: 'Inventory hub', short: 'Stock', icon: BoxesIcon },
   { href: '/inventory/alerts', label: 'Alert center', short: 'Alerts', icon: AlertIcon },
   { href: '/inventory/reorder', label: 'Reorder', short: 'Reorder', icon: ReorderIcon },
-  { href: '/pricing', label: 'Pricing', short: 'Price', icon: TagIcon },
+  { href: '/pricing', label: 'Pricing', short: 'Price', icon: TagIcon, permission: 'pricing:read' },
   { href: '/customers', label: 'Customers', short: 'CRM', icon: UsersIcon },
   { href: '/orders', label: 'Sales', short: 'Sales', icon: OrdersIcon },
   { href: '/purchasing', label: 'Purchasing', short: 'PO', icon: TruckIcon },
