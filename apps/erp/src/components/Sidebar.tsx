@@ -21,11 +21,11 @@ const nav: Array<{
   { href: '/orders', label: 'Sales', short: 'Sales', icon: OrdersIcon },
   { href: '/purchasing', label: 'Purchasing', short: 'PO', icon: TruckIcon },
   { href: '/pos', label: 'POS counter', short: 'POS', icon: PosIcon, permission: 'pos:read' },
-  { href: '/analytics', label: 'Analytics', short: 'BI', icon: ChartIcon },
 ];
 
 const adminNav = [
   { href: '/import', label: 'Tally import', short: 'Import', icon: ImportIcon },
+  { href: '/admin/analytics', label: 'Analytics', short: 'BI', icon: ChartIcon },
   { href: '/admin/audit', label: 'Activity log', short: 'Audit', icon: AuditIcon },
 ] as const;
 
@@ -40,6 +40,7 @@ type SidebarProps = {
 function isNavItemActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/';
   if (href === '/admin/audit') return pathname.startsWith('/admin/audit');
+  if (href === '/admin/analytics') return pathname.startsWith('/admin/analytics');
   if (href === '/import') return pathname.startsWith('/import');
   if (href === '/inventory/alerts') return pathname.startsWith('/inventory/alerts');
   if (href === '/inventory/reorder') return pathname.startsWith('/inventory/reorder');

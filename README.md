@@ -149,7 +149,7 @@ Adjustments are recorded in `inventory_adjustments`.
 | Orders | `/orders` | Quotes/orders, click-and-collect pick workflow |
 | Purchasing | `/purchasing` | Suppliers, POs, GRN receiving |
 | POS | `/pos` | Counter sales with SKU lookup |
-| Analytics | `/analytics` | Margin, dead stock, velocity, delivery schedule |
+| Analytics (admin) | `/admin/analytics` | Leadership KPIs: revenue, inventory health, margins, dead stock, customers |
 
 **Tally live pull (optional):** set `TALLY_URL` and run `npm run tally:sync-pull`. CSV import remains the fallback.
 
