@@ -7,6 +7,13 @@ const nav = [
   { href: '/', label: 'Dashboard', short: 'Home', icon: HomeIcon },
   { href: '/inventory', label: 'Inventory hub', short: 'Stock', icon: BoxesIcon },
   { href: '/inventory/alerts', label: 'Alert center', short: 'Alerts', icon: AlertIcon },
+  { href: '/inventory/reorder', label: 'Reorder', short: 'Reorder', icon: ReorderIcon },
+  { href: '/pricing', label: 'Pricing', short: 'Price', icon: TagIcon },
+  { href: '/customers', label: 'Customers', short: 'CRM', icon: UsersIcon },
+  { href: '/orders', label: 'Orders', short: 'Orders', icon: OrdersIcon },
+  { href: '/purchasing', label: 'Purchasing', short: 'PO', icon: TruckIcon },
+  { href: '/pos', label: 'POS counter', short: 'POS', icon: PosIcon },
+  { href: '/analytics', label: 'Analytics', short: 'BI', icon: ChartIcon },
 ] as const;
 
 type SidebarProps = {
@@ -19,10 +26,13 @@ type SidebarProps = {
 function isNavItemActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/';
   if (href === '/inventory/alerts') return pathname.startsWith('/inventory/alerts');
+  if (href === '/inventory/reorder') return pathname.startsWith('/inventory/reorder');
   if (href === '/inventory') {
     return (
       pathname === '/inventory' ||
-      (pathname.startsWith('/inventory/') && !pathname.startsWith('/inventory/alerts'))
+      (pathname.startsWith('/inventory/') &&
+        !pathname.startsWith('/inventory/alerts') &&
+        !pathname.startsWith('/inventory/reorder'))
     );
   }
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -179,6 +189,62 @@ function BoxesIcon({ className }: { className?: string }) {
         strokeWidth={1.75}
         d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
       />
+    </svg>
+  );
+}
+
+function ReorderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 4v6h6M20 20v-6h-6M20 8A8 8 0 004 16" />
+    </svg>
+  );
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 7h.01M3 11l8.5 8.5a2 2 0 002.83 0l6.17-6.17a2 2 0 000-2.83L12 2 3 11z" />
+    </svg>
+  );
+}
+
+function UsersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H2v-2a4 4 0 014-4h1a4 4 0 014 4v2zm4-10a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  );
+}
+
+function OrdersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  );
+}
+
+function TruckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h4m-4 0a2 2 0 11-4 0m6 0a2 2 0 11-4 0M3 16h10" />
+    </svg>
+  );
+}
+
+function PosIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v9a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function ChartIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m6 0h6m-6 0H7m8-10v10m0-10a2 2 0 012-2h2a2 2 0 012 2v10" />
     </svg>
   );
 }

@@ -20,6 +20,8 @@
     "validate:orange": "node scripts/validate-orange-import.js",
     "validate:swisstek": "node scripts/validate-swisstek-import.js",
     "import:diff-structure": "node scripts/diff-import-structure.js",
+    "import:price-list": "node scripts/import-price-list.js",
+    "tally:sync-pull": "node scripts/tally-sync-pull.js",
     "dev:erp": "npm run dev --workspace=@st-anthonys/erp",
     "build:erp": "npm run build --workspace=@st-anthonys/erp"
   },

@@ -89,7 +89,22 @@ function DetailRow({
   );
 }
 
-export function UnitDetailView({ unit }: { unit: InventoryUnitDetail }) {
+type Movement = {
+  movement_type: string;
+  quantity_delta: string;
+  rate: string | null;
+  note: string | null;
+  created_at: Date;
+  location_name: string;
+};
+
+export function UnitDetailView({
+  unit,
+  movements = [],
+}: {
+  unit: InventoryUnitDetail;
+  movements?: Movement[];
+}) {
   const slug = unit.vendor_slug;
   const sku = unit.primary_sku;
   const importedAt = new Date(unit.imported_at);
@@ -165,6 +180,32 @@ export function UnitDetailView({ unit }: { unit: InventoryUnitDetail }) {
           })}
         />
       </DetailCard>
+
+      {movements.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="font-display text-sm font-semibold text-slate-900">
+            Stock movement ledger
+          </h2>
+          <ul className="mt-3 divide-y divide-slate-100 text-sm">
+            {movements.map((m, i) => (
+              <li key={i} className="flex flex-wrap justify-between gap-2 py-2">
+                <span className="capitalize text-slate-600">
+                  {String(m.movement_type).replace(/_/g, ' ')}
+                </span>
+                <span className="font-mono">
+                  {Number(m.quantity_delta) > 0 ? '+' : ''}
+                  {m.quantity_delta}
+                </span>
+                <span className="text-xs text-slate-400 w-full">
+                  {m.location_name} ·{' '}
+                  {new Date(m.created_at).toLocaleString('en-GB')}
+                  {m.note ? ` · ${m.note}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <nav className="flex flex-wrap gap-2">
         <Link

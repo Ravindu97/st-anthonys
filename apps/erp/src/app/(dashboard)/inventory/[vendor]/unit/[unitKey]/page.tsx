@@ -6,6 +6,7 @@ import {
   resolveVendorCode,
   vendorHasSnapshot,
 } from '@/lib/inventory-search';
+import { getStockMovements } from '@/lib/stock-movements';
 import { alertsUrl, vendorInventoryUrl } from '@/lib/inventory-url';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,8 @@ export default async function UnitDetailPage({
   const unit = await getInventoryUnitDetail(vendorMeta.code, unitKey);
   if (!unit) notFound();
 
+  const movements = await getStockMovements(unit.stock_item_id);
+
   const unitLabel = unit.primary_sku ?? 'Unit';
 
   return (
@@ -41,7 +44,7 @@ export default async function UnitDetailPage({
           { label: unitLabel },
         ]}
       />
-      <UnitDetailView unit={unit} />
+      <UnitDetailView unit={unit} movements={movements} />
     </div>
   );
 }

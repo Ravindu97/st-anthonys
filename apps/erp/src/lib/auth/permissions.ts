@@ -1,10 +1,23 @@
-export type Role = 'admin' | 'viewer';
+export type Role = 'admin' | 'viewer' | 'purchasing' | 'sales' | 'cashier';
 
 export type Permission =
   | 'inventory:read'
   | 'import:read'
   | 'import:write'
-  | 'inventory:adjust';
+  | 'inventory:adjust'
+  | 'reorder:read'
+  | 'reorder:write'
+  | 'pricing:read'
+  | 'pricing:write'
+  | 'customers:read'
+  | 'customers:write'
+  | 'sales:read'
+  | 'sales:write'
+  | 'purchasing:read'
+  | 'purchasing:write'
+  | 'pos:read'
+  | 'pos:write'
+  | 'analytics:read';
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: [
@@ -12,8 +25,49 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'import:read',
     'import:write',
     'inventory:adjust',
+    'reorder:read',
+    'reorder:write',
+    'pricing:read',
+    'pricing:write',
+    'customers:read',
+    'customers:write',
+    'sales:read',
+    'sales:write',
+    'purchasing:read',
+    'purchasing:write',
+    'pos:read',
+    'pos:write',
+    'analytics:read',
   ],
-  viewer: ['inventory:read', 'import:read'],
+  viewer: [
+    'inventory:read',
+    'import:read',
+    'reorder:read',
+    'pricing:read',
+    'customers:read',
+    'sales:read',
+    'purchasing:read',
+    'pos:read',
+    'analytics:read',
+  ],
+  purchasing: [
+    'inventory:read',
+    'reorder:read',
+    'reorder:write',
+    'purchasing:read',
+    'purchasing:write',
+    'analytics:read',
+  ],
+  sales: [
+    'inventory:read',
+    'customers:read',
+    'customers:write',
+    'sales:read',
+    'sales:write',
+    'pricing:read',
+    'analytics:read',
+  ],
+  cashier: ['inventory:read', 'pos:read', 'pos:write', 'customers:read', 'pricing:read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { getPool } from './db';
 import { resolveVendorCode } from './inventory-search';
+import { recordStockMovement } from './stock-movements';
 
 const VARIANCE_ABS = 0.01;
 
@@ -139,6 +140,27 @@ export async function patchUnitBalance(
         input.note ?? null,
       ]
     );
+
+    const prevQty = prev.quantity != null ? Number(prev.quantity) : 0;
+    const newQty = quantity != null ? Number(quantity) : 0;
+    const qtyDelta = newQty - prevQty;
+    if (qtyDelta !== 0) {
+      await recordStockMovement(client, {
+        companyId,
+        locationId,
+        stockItemId,
+        movementType: 'adjustment',
+        quantityDelta: qtyDelta,
+        rate: rate != null ? Number(rate) : null,
+        valueDelta:
+          value != null && prev.value != null
+            ? Number(value) - Number(prev.value)
+            : null,
+        referenceType: 'inventory_adjustment',
+        referenceId: adj[0].id as string,
+        note: input.note ?? 'Manual balance adjustment',
+      });
+    }
 
     await client.query('COMMIT');
 

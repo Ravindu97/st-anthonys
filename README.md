@@ -138,3 +138,19 @@ Content-Type: application/json
 ```
 
 Adjustments are recorded in `inventory_adjustments`.
+
+## ERP modules (phased rollout)
+
+| Module | Route | Notes |
+|--------|-------|-------|
+| Reorder suggestions | `/inventory/reorder` | Per-item reorder rules; scan below-threshold stock |
+| Pricing | `/pricing` | Price lists + CSV import (`npm run import:price-list`) |
+| Customers | `/customers` | Contractor accounts with tier pricing |
+| Orders | `/orders` | Quotes/orders, click-and-collect pick workflow |
+| Purchasing | `/purchasing` | Suppliers, POs, GRN receiving |
+| POS | `/pos` | Counter sales with SKU lookup |
+| Analytics | `/analytics` | Margin, dead stock, velocity, delivery schedule |
+
+**Tally live pull (optional):** set `TALLY_URL` and run `npm run tally:sync-pull`. CSV import remains the fallback.
+
+**New roles:** `purchasing`, `sales`, `cashier` (in addition to `admin` / `viewer`).

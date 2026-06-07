@@ -1,4 +1,12 @@
 import { getPool } from './db';
+import {
+  AT_RISK_LINE_SQL,
+  IB_AT_RISK_FILTER,
+  IB_LOW_STOCK_FILTER,
+  IB_REORDER_MIN_SQL,
+  LOW_STOCK_LINE_SQL,
+  REORDER_MIN_QTY_SQL,
+} from './reorder-sql';
 
 export type StockStatus = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 export type InventoryView = 'table' | 'grouped';
@@ -13,11 +21,6 @@ export type InventorySearchParams = {
   pageSize?: number;
   dataIssues?: 'variance';
 };
-
-const AT_RISK_LINE_SQL = `(
-  COALESCE(v.quantity, 0) <= 0
-  OR (COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10)
-)`;
 
 const LINE_VALUE_SQL = `COALESCE(v.value, v.quantity * v.rate, 0)`;
 
@@ -90,10 +93,10 @@ function buildStatusClause(status: StockStatus): string {
     return ` AND COALESCE(v.quantity, 0) <= 0`;
   }
   if (status === 'low_stock') {
-    return ` AND COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10`;
+    return ` AND ${LOW_STOCK_LINE_SQL}`;
   }
   if (status === 'in_stock') {
-    return ` AND COALESCE(v.quantity, 0) >= 10`;
+    return ` AND COALESCE(v.quantity, 0) >= (${REORDER_MIN_QTY_SQL})`;
   }
   return '';
 }
@@ -198,6 +201,7 @@ export async function getActiveVendors() {
     WITH latest AS (
       SELECT DISTINCT ON (inv.location_id)
         inv.id AS snapshot_id,
+        inv.location_id,
         inv.created_at AS imported_at,
         loc.tally_name AS location_name,
         cat.code,
@@ -214,20 +218,21 @@ export async function getActiveVendors() {
       LOWER(l.code) AS slug,
       COUNT(ib.id)::int AS sku_count,
       COALESCE(SUM(ib.value), 0) AS total_value,
-      COUNT(*) FILTER (
-        WHERE COALESCE(ib.quantity, 0) > 0 AND COALESCE(ib.quantity, 0) < 10
-      )::int AS low_stock,
+      COUNT(*) FILTER (WHERE ${IB_LOW_STOCK_FILTER})::int AS low_stock,
       COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) <= 0)::int AS out_of_stock,
-      COUNT(*) FILTER (WHERE COALESCE(ib.quantity, 0) >= 10)::int AS in_stock,
+      COUNT(*) FILTER (
+        WHERE COALESCE(ib.quantity, 0) >= ${IB_REORDER_MIN_SQL}
+      )::int AS in_stock,
       COALESCE(SUM(
         COALESCE(ib.value, ib.quantity * ib.rate, 0)
-      ) FILTER (
-        WHERE COALESCE(ib.quantity, 0) <= 0
-           OR (COALESCE(ib.quantity, 0) > 0 AND COALESCE(ib.quantity, 0) < 10)
-      ), 0) AS at_risk_value,
+      ) FILTER (WHERE ${IB_AT_RISK_FILTER}), 0) AS at_risk_value,
       MAX(l.imported_at) AS imported_at
     FROM latest l
     JOIN inventory_balances ib ON ib.snapshot_id = l.snapshot_id
+    LEFT JOIN reorder_rules rr
+      ON rr.stock_item_id = ib.stock_item_id
+      AND rr.location_id = l.location_id
+      AND rr.is_active = true
     GROUP BY l.code, l.name, l.location_name, l.imported_at
     ORDER BY total_value DESC
   `);
@@ -288,9 +293,7 @@ export async function getVendorKpis(
       COUNT(*)::int AS sku_count,
       COALESCE(SUM(v.value), 0) AS total_value,
       COUNT(*) FILTER (WHERE COALESCE(v.quantity, 0) <= 0)::int AS out_of_stock,
-      COUNT(*) FILTER (
-        WHERE COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10
-      )::int AS low_stock
+      COUNT(*) FILTER (WHERE ${LOW_STOCK_LINE_SQL})::int AS low_stock
     FROM v_location_summary v
     JOIN snap s ON s.snapshot_id = v.snapshot_id
     WHERE 1=1 ${filterSql}
@@ -402,9 +405,9 @@ export async function getGroupRollupsForVendor(categoryCode: string) {
   }[];
 }
 
-export function stockStatusLabel(qty: number): string {
+export function stockStatusLabel(qty: number, minQty = 10): string {
   if (qty <= 0) return 'Out of stock';
-  if (qty < 10) return 'Low stock';
+  if (qty < minQty) return 'Low stock';
   return 'In stock';
 }
 
@@ -525,9 +528,7 @@ export async function getGroupHealth(categoryCode: string) {
       COUNT(*)::int AS sku_count,
       COALESCE(SUM(${LINE_VALUE_SQL}), 0) AS total_value,
       COUNT(*) FILTER (WHERE COALESCE(v.quantity, 0) <= 0)::int AS out_of_stock,
-      COUNT(*) FILTER (
-        WHERE COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10
-      )::int AS low_stock,
+      COUNT(*) FILTER (WHERE ${LOW_STOCK_LINE_SQL})::int AS low_stock,
       COALESCE(SUM(${LINE_VALUE_SQL}) FILTER (WHERE ${AT_RISK_LINE_SQL}), 0) AS at_risk_value
     FROM v_location_summary v
     JOIN snap s ON s.snapshot_id = v.snapshot_id
@@ -649,7 +650,7 @@ export async function searchCrossVendorAlerts(params: {
 
   let statusFilter = '';
   if (params.tab === 'low') {
-    statusFilter = ` AND COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10`;
+    statusFilter = ` AND ${LOW_STOCK_LINE_SQL}`;
   } else if (params.tab === 'out') {
     statusFilter = ` AND COALESCE(v.quantity, 0) <= 0`;
   } else if (params.tab === 'variance') {
@@ -892,7 +893,7 @@ export async function getInventoryUnitDetail(
       ${LINE_VALUE_SQL} AS line_value,
       CASE
         WHEN COALESCE(v.quantity, 0) <= 0 THEN 'out_of_stock'
-        WHEN COALESCE(v.quantity, 0) > 0 AND COALESCE(v.quantity, 0) < 10 THEN 'low_stock'
+        WHEN ${LOW_STOCK_LINE_SQL} THEN 'low_stock'
         ELSE 'in_stock'
       END AS stock_status,
       v.value_variance AS has_variance_alert,
