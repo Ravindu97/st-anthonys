@@ -41,6 +41,7 @@ const LATEST_SNAPSHOT_CTE = `
            inv.period_starts_on,
            inv.period_ends_on,
            inv.created_at AS imported_at,
+           loc.id AS location_id,
            loc.name AS location_name,
            loc.tally_name AS location_tally_name,
            cat.code AS category_code,
@@ -625,6 +626,7 @@ export type InventoryUnitDetail = {
   period_ends_on: Date | string;
   imported_at: Date | string;
   previous_quantity: number | null;
+  location_id: string;
 };
 
 const UUID_RE =
@@ -901,6 +903,7 @@ export async function getInventoryUnitDetail(
       s.category_name AS vendor_name,
       LOWER(s.category_code) AS vendor_slug,
       s.location_name,
+      s.location_id,
       s.period_starts_on,
       s.period_ends_on,
       s.imported_at,

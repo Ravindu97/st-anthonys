@@ -529,6 +529,7 @@ export async function runLocationSummaryImport(client, options) {
       snapshotId,
       locationId,
       categoryCode,
+      companyId,
       rowCounts,
       report,
       dryRun: false,

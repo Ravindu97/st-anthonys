@@ -3,6 +3,8 @@ import {
   getInventoryHubSummary,
   searchCrossVendorAlerts,
 } from '@/lib/inventory-search';
+import { getReorderWorkbenchSummary } from '@/lib/reorder';
+import { formatLkr } from '@/lib/format';
 import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
 import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
 import { DashboardAlertsPanel } from '@/components/inventory/DashboardAlertsPanel';
@@ -12,16 +14,20 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
+  let reorderSummary: Awaited<ReturnType<typeof getReorderWorkbenchSummary>> | null =
+    null;
   let newOutsCount = 0;
   let error: string | null = null;
 
   try {
-    const [hub, newOuts] = await Promise.all([
+    const [hub, newOuts, reorder] = await Promise.all([
       getInventoryHubSummary(),
       searchCrossVendorAlerts({ tab: 'new_outs', page: 1, pageSize: 1 }),
+      getReorderWorkbenchSummary(),
     ]);
     summary = hub;
     newOutsCount = newOuts.totalCount;
+    reorderSummary = reorder;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Database unavailable';
   }
@@ -73,7 +79,17 @@ export default async function DashboardPage() {
             }
           />
 
-          <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-6">
+            {reorderSummary && reorderSummary.items_below_min > 0 && (
+              <MetricCardCountLink
+                href="/inventory/reorder?tab=action"
+                label="Need reorder"
+                count={reorderSummary.items_below_min}
+                accent="gold"
+                sub={`${formatLkr(reorderSummary.estimated_value_at_risk)} at risk`}
+                className="h-full"
+              />
+            )}
             <MetricCardMoney
               label="Total stock value"
               amount={summary.total_value}

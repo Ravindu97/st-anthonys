@@ -18,6 +18,7 @@ export type VendorHubRow = {
   at_risk_value: string | number;
   risk_pct: number;
   imported_at: string | Date;
+  reorder_below_min?: number;
 };
 
 function AlertPillLink({
@@ -132,6 +133,15 @@ export function VendorHubTable({ vendors }: { vendors: VendorHubRow[] }) {
                   </span>
                   <span className="mt-0.5 block font-mono text-xs text-slate-400">
                     {v.code}
+                    {(v.reorder_below_min ?? 0) > 0 && (
+                      <Link
+                        href={`/inventory/reorder?tab=action&vendor=${v.code}`}
+                        onClick={stopRowNav}
+                        className="ml-2 rounded-full bg-brand-blue-50 px-2 py-0.5 text-[10px] font-semibold text-brand-blue-700 hover:bg-brand-blue-100"
+                      >
+                        {v.reorder_below_min} need reorder
+                      </Link>
+                    )}
                   </span>
                   <span className="mt-1 block text-sm text-slate-500 md:hidden">
                     {v.location_name}

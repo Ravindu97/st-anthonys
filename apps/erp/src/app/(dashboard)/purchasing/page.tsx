@@ -52,8 +52,15 @@ export default async function PurchasingPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {orders.items.map((o) => (
-              <tr key={o.id}>
-                <td className="px-4 py-2 font-mono text-xs">{o.po_number}</td>
+              <tr key={o.id} className="hover:bg-slate-50">
+                <td className="px-4 py-2 font-mono text-xs">
+                  <Link
+                    href={`/purchasing/${o.id}`}
+                    className="text-brand-blue-600 hover:underline"
+                  >
+                    {o.po_number}
+                  </Link>
+                </td>
                 <td className="px-4 py-2">{o.supplier_name}</td>
                 <td className="px-4 py-2 capitalize">{o.status}</td>
                 <td className="px-4 py-2 text-right font-mono">
@@ -66,16 +73,20 @@ export default async function PurchasingPage() {
         </table>
         {orders.items.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-500">
-            No purchase orders. Approve reorder suggestions and create POs via API.
+            No purchase orders yet. Approve lines in the{' '}
+            <Link href="/inventory/reorder?tab=approved" className="text-brand-blue-600 hover:underline">
+              reorder hub
+            </Link>{' '}
+            and create POs by vendor.
           </p>
         )}
       </div>
 
       <p className="text-xs text-slate-500">
         <Link href="/inventory/reorder" className="text-brand-blue-600 hover:underline">
-          Reorder suggestions
+          Reorder hub
         </Link>{' '}
-        → approve → POST /api/purchasing/orders with suggestionId + supplierId
+        → approve → create PO per vendor
       </p>
     </div>
   );

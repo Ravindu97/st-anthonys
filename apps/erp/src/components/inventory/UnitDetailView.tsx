@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { formatLkr } from '@/lib/format';
 import type { InventoryUnitDetail } from '@/lib/inventory-search';
 import { alertsUrl, vendorInventoryUrl } from '@/lib/inventory-url';
+import { ReorderSettingsCard } from '@/components/reorder/ReorderSettingsCard';
 
 function formatQty(value: string | number | null) {
   if (value == null || value === '') return '—';
@@ -159,6 +160,13 @@ export function UnitDetailView({
           </p>
         </section>
       )}
+
+      <ReorderSettingsCard
+        stockItemId={unit.stock_item_id}
+        locationId={unit.location_id}
+        currentQty={Number(unit.quantity ?? 0)}
+        stockStatus={unit.stock_status}
+      />
 
       <DetailCard title="Catalog">
         <DetailRow label="Stock group" value={unit.stock_group_name} />

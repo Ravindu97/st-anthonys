@@ -6,6 +6,7 @@ import {
   isDryRunComplete,
   ImportValidationError,
   runLocationSummaryImport,
+  syncPurchaseSuggestionsAfterImport,
 } from '@st-anthonys/import';
 import { getPool, sha256File } from './lib/db.js';
 
@@ -53,6 +54,13 @@ async function main() {
     });
 
     await client.query('COMMIT');
+
+    if (!dryRun && result.companyId) {
+      const scan = await syncPurchaseSuggestionsAfterImport(pool, result.companyId);
+      console.log(
+        `  Reorder scan: ${scan.scanned} below min, ${scan.created} new, ${scan.updated} updated`
+      );
+    }
 
     console.log(dryRun ? 'Dry run completed (rolled back).' : 'Import completed.');
     console.log(`  Snapshot: ${result.snapshotId}`);

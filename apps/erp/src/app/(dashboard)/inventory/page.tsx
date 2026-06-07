@@ -6,6 +6,7 @@ import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory
 import { VendorHubClient } from '@/components/inventory/VendorHubClient';
 import { alertsUrl } from '@/lib/inventory-url';
 import { listImportRuns } from '@/lib/import-runs';
+import { getReorderCountsByVendor } from '@/lib/reorder';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,21 +38,30 @@ export default async function InventoryHubPage({ searchParams }: PageProps) {
   const forbidden = params.error === 'forbidden';
 
   let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
+  let reorderByVendor: Awaited<ReturnType<typeof getReorderCountsByVendor>> = [];
   let recentImport: Awaited<ReturnType<typeof listImportRuns>>[number] | null = null;
   let error: string | null = null;
 
   try {
-    const [hub, runs] = await Promise.all([
+    const [hub, runs, reorderCounts] = await Promise.all([
       getInventoryHubSummary(),
       listImportRuns(1),
+      getReorderCountsByVendor(),
     ]);
     summary = hub;
     recentImport = runs[0] ?? null;
+    reorderByVendor = reorderCounts;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Could not load inventory';
   }
 
-  const vendors = summary?.vendors ?? [];
+  const reorderMap = Object.fromEntries(
+    reorderByVendor.map((r) => [r.category_code, r.below_min_count])
+  );
+  const vendors = (summary?.vendors ?? []).map((v) => ({
+    ...v,
+    reorder_below_min: reorderMap[v.code] ?? 0,
+  }));
   const lastImport = summary ? latestImportDate(vendors) : null;
 
   return (

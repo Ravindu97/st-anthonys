@@ -1,26 +1,53 @@
-import Link from 'next/link';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
-import { ReorderActions } from '@/components/reorder/ReorderActions';
-import { listPurchaseSuggestions } from '@/lib/reorder';
+import { ReorderRulesPanel } from '@/components/reorder/ReorderRulesPanel';
+import { ReorderWorkbench } from '@/components/reorder/ReorderWorkbench';
+import { getDefaultCompanyId } from '@/lib/company';
+import {
+  getReorderWorkbench,
+  listCategoryDefaults,
+  listReorderRules,
+} from '@/lib/reorder';
 
 export const dynamic = 'force-dynamic';
+
+const VALID_TABS = ['action', 'approved', 'needs_rule', 'history', 'rules'] as const;
+type Tab = (typeof VALID_TABS)[number];
 
 export default async function ReorderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; vendor?: string; q?: string; page?: string }>;
 }) {
   const sp = await searchParams;
-  const status = sp.status ?? 'draft';
+  const tab = (VALID_TABS.includes(sp.tab as Tab) ? sp.tab : 'action') as Tab;
   const page = Math.max(1, parseInt(sp.page ?? '1', 10));
+  const q = sp.q?.trim() || undefined;
+  const companyId = await getDefaultCompanyId();
 
-  let result: Awaited<ReturnType<typeof listPurchaseSuggestions>> | null = null;
   let error: string | null = null;
+  let workbench: Awaited<ReturnType<typeof getReorderWorkbench>> | null = null;
+  let rulesResult: Awaited<ReturnType<typeof listReorderRules>> | null = null;
+  let defaults: Awaited<ReturnType<typeof listCategoryDefaults>> = [];
 
   try {
-    result = await listPurchaseSuggestions({ status, page });
+    if (tab === 'rules') {
+      [rulesResult, defaults, workbench] = await Promise.all([
+        listReorderRules({ q, page, pageSize: 50, categoryCode: sp.vendor }),
+        listCategoryDefaults(),
+        getReorderWorkbench({ companyId, tab: 'action' }),
+      ]);
+    } else {
+      workbench = await getReorderWorkbench({
+        companyId,
+        tab,
+        vendorCode: sp.vendor,
+        q,
+        page,
+        pageSize: 50,
+      });
+    }
   } catch (e) {
-    error = e instanceof Error ? e.message : 'Could not load suggestions';
+    error = e instanceof Error ? e.message : 'Could not load reorder hub';
   }
 
   return (
@@ -28,86 +55,47 @@ export default async function ReorderPage({
       <PageBreadcrumbs
         items={[
           { label: 'Inventory hub', href: '/inventory' },
-          { label: 'Reorder & purchasing suggestions' },
+          { label: 'Reorder hub' },
         ]}
       />
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
-            Reorder suggestions
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Items below reorder level — approve to create purchase orders
-          </p>
-        </div>
-        <ReorderActions />
+      <header>
+        <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
+          Reorder hub
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Vendor-grouped replenishment from Tally snapshots — scan, review, approve, create POs
+        </p>
       </header>
-
-      <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
-        {(['draft', 'approved', 'converted', 'cancelled'] as const).map((s) => (
-          <Link
-            key={s}
-            href={`/inventory/reorder?status=${s}`}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize ${
-              status === s
-                ? 'bg-brand-blue-500 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {s}
-          </Link>
-        ))}
-      </nav>
 
       {error && (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      {result && result.items.length === 0 && (
-        <p className="text-sm text-slate-500">No suggestions in this status.</p>
-      )}
-
-      {result && result.items.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 uppercase">
-              <tr>
-                <th className="px-4 py-3">SKU</th>
-                <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Vendor</th>
-                <th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3 text-right">Current</th>
-                <th className="px-4 py-3 text-right">Min</th>
-                <th className="px-4 py-3 text-right">Suggest</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {result.items.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 font-mono text-xs">{s.primary_sku ?? '—'}</td>
-                  <td className="px-4 py-2">{s.item_name}</td>
-                  <td className="px-4 py-2">
-                    <Link
-                      href={`/inventory/${s.vendor_slug}`}
-                      className="text-brand-blue-600 hover:underline"
-                    >
-                      {s.category_name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">{s.location_name}</td>
-                  <td className="px-4 py-2 text-right font-mono">{s.current_qty}</td>
-                  <td className="px-4 py-2 text-right font-mono">{s.min_qty}</td>
-                  <td className="px-4 py-2 text-right font-mono font-medium">
-                    {s.suggested_qty}
-                  </td>
-                  <td className="px-4 py-2 capitalize text-slate-600">{s.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {workbench && (
+        <ReorderWorkbench
+          lines={tab === 'rules' ? [] : workbench.lines}
+          summary={workbench.summary}
+          tab={tab}
+          totalCount={tab === 'rules' ? rulesResult?.totalCount ?? 0 : workbench.totalCount}
+          page={tab === 'rules' ? rulesResult?.page ?? 1 : workbench.page}
+          pageSize={tab === 'rules' ? rulesResult?.pageSize ?? 50 : workbench.pageSize}
+          q={q}
+          vendor={sp.vendor}
+          rulesPanel={
+            tab === 'rules' && rulesResult ? (
+              <ReorderRulesPanel
+                rules={rulesResult.items}
+                defaults={defaults}
+                totalCount={rulesResult.totalCount}
+                page={rulesResult.page}
+                pageSize={rulesResult.pageSize}
+                q={q}
+                vendor={sp.vendor}
+              />
+            ) : undefined
+          }
+        />
       )}
     </div>
   );

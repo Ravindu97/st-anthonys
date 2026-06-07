@@ -146,6 +146,102 @@ export async function getPurchaseOrder(id: string) {
   return { order: po[0], lines };
 }
 
+export async function createPurchaseOrderFromSuggestions(input: {
+  companyId: string;
+  suggestionIds: string[];
+  supplierId: string;
+  locationId?: string;
+  createdBy?: string;
+}) {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: sugs } = await client.query(
+      `SELECT * FROM purchase_suggestions
+       WHERE id = ANY($1::uuid[]) AND status = 'approved'`,
+      [input.suggestionIds]
+    );
+    if (sugs.length === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false as const, error: 'No approved suggestions found' };
+    }
+    if (sugs.length !== input.suggestionIds.length) {
+      await client.query('ROLLBACK');
+      return { ok: false as const, error: 'Some suggestions are missing or not approved' };
+    }
+
+    const locationId = input.locationId ?? sugs[0].location_id;
+    const poNumber = await nextPoNumber(client, input.companyId);
+    let subtotal = 0;
+    const lineRows: Array<{
+      stockItemId: string;
+      qty: number;
+      rate: number;
+      lineTotal: number;
+    }> = [];
+
+    for (const s of sugs) {
+      const qty = Number(s.user_adjusted_qty ?? s.suggested_qty);
+      const rate = Number(s.rate_at_scan ?? 0);
+      const lineTotal = qty * rate;
+      subtotal += lineTotal;
+      lineRows.push({
+        stockItemId: s.stock_item_id,
+        qty,
+        rate,
+        lineTotal,
+      });
+    }
+
+    const { rows: po } = await client.query(
+      `INSERT INTO purchase_orders (
+         company_id, po_number, supplier_id, location_id, status,
+         subtotal, total_amount, created_by
+       ) VALUES ($1, $2, $3, $4, 'draft', $5, $5, $6)
+       RETURNING *`,
+      [
+        input.companyId,
+        poNumber,
+        input.supplierId,
+        locationId,
+        subtotal,
+        input.createdBy ?? null,
+      ]
+    );
+
+    let lineNo = 1;
+    for (const line of lineRows) {
+      await client.query(
+        `INSERT INTO purchase_order_lines (
+           purchase_order_id, line_no, stock_item_id, quantity, unit_rate, line_total
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [po[0].id, lineNo++, line.stockItemId, line.qty, line.rate, line.lineTotal]
+      );
+    }
+
+    await client.query(
+      `UPDATE purchase_suggestions SET status = 'converted', updated_at = now()
+       WHERE id = ANY($1::uuid[])`,
+      [input.suggestionIds]
+    );
+
+    await client.query('COMMIT');
+    return {
+      ok: true as const,
+      id: po[0].id as string,
+      poNumber,
+      lineCount: lineRows.length,
+    };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function createPurchaseOrderFromSuggestion(input: {
   companyId: string;
   suggestionId: string;

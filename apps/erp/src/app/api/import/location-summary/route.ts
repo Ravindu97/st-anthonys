@@ -8,6 +8,7 @@ import {
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
+import { syncPurchaseSuggestions } from '@/lib/reorder';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,7 +72,11 @@ export async function POST(request: Request) {
         dryRun,
       });
       await client.query('COMMIT');
-      return NextResponse.json({ ...result, dryRun: false });
+      let reorderScan = null;
+      if (result.companyId) {
+        reorderScan = await syncPurchaseSuggestions(result.companyId);
+      }
+      return NextResponse.json({ ...result, dryRun: false, reorderScan });
     } catch (err) {
       if (isDryRunComplete(err)) {
         await client.query('ROLLBACK');

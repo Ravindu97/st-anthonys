@@ -8,6 +8,8 @@
     ".": "./index.js",
     "./parse": "./parse-location-summary.js",
     "./parse-location-summary.js": "./parse-location-summary.js",
-    "./price-list.js": "./price-list.js"
+    "./price-list.js": "./price-list.js",
+    "./reorder-rules.js": "./reorder-rules.js",
+    "./reorder-sync.js": "./reorder-sync.js"
   }
 }
