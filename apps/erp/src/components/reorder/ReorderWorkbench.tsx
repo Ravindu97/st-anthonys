@@ -6,17 +6,18 @@ import { useMemo, useState } from 'react';
 import { formatLkr } from '@/lib/format';
 import type { ReorderWorkbenchLine, ReorderWorkbenchSummary } from '@/lib/reorder';
 import { reorderHubUrl } from '@/lib/reorder-url';
+import { BulkCreatePoModal } from './BulkCreatePoModal';
 import { CreatePoModal } from './CreatePoModal';
 import { ReorderLineActions } from './ReorderLineActions';
 import { ReorderPagination } from './ReorderPagination';
 import { ReorderSearchBar } from './ReorderSearchBar';
 
 const TABS = [
-  { id: 'action', label: 'Action needed' },
-  { id: 'approved', label: 'Approved' },
-  { id: 'needs_rule', label: 'Needs rule' },
-  { id: 'history', label: 'History' },
-  { id: 'rules', label: 'Rules' },
+  { id: 'action', label: 'Review queue', desc: 'Below minimum — approve or dismiss before ordering' },
+  { id: 'approved', label: 'Ready for PO', desc: 'Approved lines — select items, then create purchase orders' },
+  { id: 'needs_rule', label: 'Needs rule', desc: 'Set min qty before they enter the queue' },
+  { id: 'history', label: 'History', desc: 'Converted or cancelled suggestions' },
+  { id: 'rules', label: 'Rules', desc: 'Category defaults and per-SKU thresholds' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -68,9 +69,11 @@ export function ReorderWorkbench({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [poVendor, setPoVendor] = useState<{
+    code: string;
     name: string;
     lines: ReorderWorkbenchLine[];
   } | null>(null);
+  const [showBulkPo, setShowBulkPo] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
@@ -169,7 +172,7 @@ export function ReorderWorkbench({
           sub={formatLkr(summary.estimated_value_at_risk)}
         />
         <KpiCard label="Draft suggestions" value={String(summary.draft_count)} />
-        <KpiCard label="Approved awaiting PO" value={String(summary.approved_count)} />
+        <KpiCard label="Ready for PO" value={String(summary.approved_count)} />
         <KpiCard
           label="Snapshot age"
           value={
@@ -232,6 +235,29 @@ export function ReorderWorkbench({
 
       {scanMsg && <p className="text-xs text-slate-500">{scanMsg}</p>}
 
+      {TABS.find((t) => t.id === tab)?.desc && tab !== 'rules' && (
+        <p className="text-sm text-slate-600">{TABS.find((t) => t.id === tab)!.desc}</p>
+      )}
+
+      {tab === 'approved' && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowBulkPo(true)}
+            className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
+          >
+            Create POs for selected ({selected.size})
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {tab !== 'rules' && tab === 'action' && selected.size > 0 && (
         <div className="flex gap-2">
           <button
@@ -252,7 +278,12 @@ export function ReorderWorkbench({
       )}
 
       {tab !== 'rules' && lines.length === 0 && (
-        <p className="text-sm text-slate-500">Nothing in this queue.</p>
+        <p className="text-sm text-slate-500">
+          {tab === 'action' && 'No items waiting for review.'}
+          {tab === 'approved' && 'No lines ready for PO — approve items in the review queue first.'}
+          {tab === 'needs_rule' && 'No high-value items missing reorder rules.'}
+          {tab === 'history' && 'No converted or cancelled suggestions yet.'}
+        </p>
       )}
 
       {tab !== 'rules' &&
@@ -298,20 +329,22 @@ export function ReorderWorkbench({
                     <div className="flex justify-end px-4 py-2">
                       <button
                         type="button"
-                        onClick={() =>
+                        disabled={selectedInVendor === 0}
+                        onClick={() => {
+                          const picked = vendor.lines.filter((l) =>
+                            selected.has(lineKey(l))
+                          );
                           setPoVendor({
+                            code: vendor.lines[0]?.category_code ?? vendor.name,
                             name: vendor.name,
-                            lines: vendor.lines.filter((l) =>
-                              selected.size > 0
-                                ? selected.has(lineKey(l))
-                                : true
-                            ),
-                          })
-                        }
-                        className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-600"
+                            lines: picked,
+                          });
+                        }}
+                        className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        Create PO for {vendor.name}
-                        {selectedInVendor > 0 ? ` (${selectedInVendor})` : ''}
+                        {selectedInVendor > 0
+                          ? `Create PO — ${selectedInVendor} selected`
+                          : `Select lines to create PO`}
                       </button>
                     </div>
                   )}
@@ -319,11 +352,11 @@ export function ReorderWorkbench({
                     <table className="min-w-full text-sm">
                       <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                         <tr>
-                          {tab === 'action' && (
+                          {(tab === 'action' || tab === 'approved') && (
                             <th className="px-4 py-2 w-8">
                               <input
                                 type="checkbox"
-                                checked={keys.every((k) => selected.has(k))}
+                                checked={keys.length > 0 && keys.every((k) => selected.has(k))}
                                 onChange={() => toggleVendor(keys)}
                                 aria-label="Select vendor"
                               />
@@ -343,12 +376,13 @@ export function ReorderWorkbench({
                           const key = lineKey(line);
                           return (
                             <tr key={key} className="hover:bg-slate-50/50">
-                              {tab === 'action' && (
+                              {(tab === 'action' || tab === 'approved') && (
                                 <td className="px-4 py-2">
                                   <input
                                     type="checkbox"
                                     checked={selected.has(key)}
                                     onChange={() => toggleSelect(key)}
+                                    aria-label={`Select ${line.primary_sku ?? line.item_name}`}
                                   />
                                 </td>
                               )}
@@ -401,9 +435,16 @@ export function ReorderWorkbench({
 
       {poVendor && (
         <CreatePoModal
-          lines={poVendor.lines}
+          vendorCode={poVendor.code}
           vendorName={poVendor.name}
+          lines={poVendor.lines}
           onClose={() => setPoVendor(null)}
+        />
+      )}
+      {showBulkPo && (
+        <BulkCreatePoModal
+          selectedLines={lines.filter((l) => selected.has(lineKey(l)))}
+          onClose={() => setShowBulkPo(false)}
         />
       )}
     </div>

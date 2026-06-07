@@ -24,3 +24,109 @@
     font-family: var(--font-sans);
   }
 }
+
+/* ── Purchase order — distributor invoice style ── */
+.brand-mark-tile {
+  border-radius: 1px;
+}
+.brand-mark-tile--white {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+.brand-mark-tile--gold {
+  background: #f08b1d;
+}
+.brand-mark-tile--green {
+  background: #10b981;
+}
+
+.po-document {
+  background: #fafcf9;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.po-doc-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.po-doc-heading {
+  border-bottom: 1px solid #94a3b8;
+  padding-bottom: 0.35rem;
+}
+
+.po-th {
+  background: #1e5a8a;
+  border: 1px solid #1e5a8a;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.po-td {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 0.35rem 0.4rem;
+  vertical-align: top;
+}
+
+.po-doc-total-box {
+  background: #ffffff;
+}
+
+.po-signature-line {
+  border-bottom: 1px solid #64748b;
+}
+
+@media print {
+  /* Hide app chrome only — not .po-document */
+  aside,
+  body > div > div > header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .print-page {
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  .print-document {
+    padding: 0 !important;
+  }
+
+  .po-document {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .po-document,
+  .po-th,
+  .brand-mark-tile--gold,
+  .brand-mark-tile--green {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+}

@@ -121,21 +121,89 @@ export async function listPurchaseOrders(opts?: {
   };
 }
 
+export type PurchaseOrderLine = {
+  id: string;
+  line_no: number;
+  stock_item_id: string;
+  quantity: string;
+  unit_rate: string;
+  received_qty: string;
+  line_total: string;
+  item_name: string;
+  primary_sku: string | null;
+  stock_group_name?: string | null;
+  category_name?: string | null;
+  category_code?: string | null;
+};
+
+export type PurchaseOrderDocument = {
+  order: {
+    id: string;
+    po_number: string;
+    status: string;
+    subtotal: string;
+    tax_amount: string;
+    total_amount: string;
+    notes: string | null;
+    expected_date: string | null;
+    created_at: Date;
+    company_id: string;
+    supplier_name: string;
+    supplier_code: string;
+    supplier_email: string | null;
+    supplier_phone: string | null;
+    payment_terms_days: number;
+    location_name: string;
+    location_tally_name: string | null;
+    vendor_code: string;
+    vendor_name: string;
+  };
+  lines: PurchaseOrderLine[];
+};
+
 export async function getPurchaseOrder(id: string) {
+  const doc = await getPurchaseOrderDocument(id);
+  if (!doc) return null;
+  return { order: doc.order, lines: doc.lines };
+}
+
+export async function getPurchaseOrderDocument(
+  id: string
+): Promise<PurchaseOrderDocument | null> {
   const pool = getPool();
   const { rows: po } = await pool.query(
-    `SELECT po.*, s.name AS supplier_name, s.code AS supplier_code
+    `SELECT
+       po.*,
+       s.name AS supplier_name,
+       s.code AS supplier_code,
+       s.email AS supplier_email,
+       s.phone AS supplier_phone,
+       s.payment_terms_days,
+       loc.name AS location_name,
+       loc.tally_name AS location_tally_name,
+       cat.code AS vendor_code,
+       cat.name AS vendor_name
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
+     JOIN locations loc ON loc.id = po.location_id
+     JOIN stock_categories cat ON cat.id = loc.stock_category_id
      WHERE po.id = $1`,
     [id]
   );
   if (po.length === 0) return null;
 
   const { rows: lines } = await pool.query(
-    `SELECT pol.*, si.name AS item_name, a.alias AS primary_sku
+    `SELECT
+       pol.*,
+       si.name AS item_name,
+       a.alias AS primary_sku,
+       sg.name AS stock_group_name,
+       cat.name AS category_name,
+       cat.code AS category_code
      FROM purchase_order_lines pol
      JOIN stock_items si ON si.id = pol.stock_item_id
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN stock_groups sg ON sg.id = si.group_id
      LEFT JOIN LATERAL (
        SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
      ) a ON true
@@ -144,6 +212,19 @@ export async function getPurchaseOrder(id: string) {
     [id]
   );
   return { order: po[0], lines };
+}
+
+export async function suggestSupplierForVendor(vendorCode: string) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `SELECT * FROM suppliers
+     WHERE is_active = true
+       AND (UPPER(code) = UPPER($1) OR name ILIKE $2)
+     ORDER BY CASE WHEN UPPER(code) = UPPER($1) THEN 0 ELSE 1 END, name
+     LIMIT 1`,
+    [vendorCode, `%${vendorCode}%`]
+  );
+  return (rows[0] as Supplier) ?? null;
 }
 
 export async function createPurchaseOrderFromSuggestions(input: {
@@ -240,6 +321,69 @@ export async function createPurchaseOrderFromSuggestions(input: {
   } finally {
     client.release();
   }
+}
+
+export type VendorPoBatch = {
+  vendorCode: string;
+  vendorName: string;
+  suggestionIds: string[];
+  supplierId: string;
+  locationId: string;
+};
+
+/** Create one PO per vendor group from approved reorder suggestions */
+export async function createBulkPurchaseOrdersByVendor(input: {
+  companyId: string;
+  batches: VendorPoBatch[];
+  createdBy?: string;
+  notes?: string;
+}) {
+  const results: Array<{
+    ok: true;
+    id: string;
+    poNumber: string;
+    vendorCode: string;
+    lineCount: number;
+  }> = [];
+  const errors: string[] = [];
+
+  for (const batch of input.batches) {
+    if (batch.suggestionIds.length === 0) continue;
+    const result = await createPurchaseOrderFromSuggestions({
+      companyId: input.companyId,
+      suggestionIds: batch.suggestionIds,
+      supplierId: batch.supplierId,
+      locationId: batch.locationId,
+      createdBy: input.createdBy,
+    });
+    if (!result.ok) {
+      errors.push(`${batch.vendorName}: ${result.error}`);
+      continue;
+    }
+    if (input.notes) {
+      const pool = getPool();
+      await pool.query(`UPDATE purchase_orders SET notes = $2 WHERE id = $1`, [
+        result.id,
+        input.notes,
+      ]);
+    }
+    results.push({
+      ok: true,
+      id: result.id,
+      poNumber: result.poNumber,
+      vendorCode: batch.vendorCode,
+      lineCount: result.lineCount,
+    });
+  }
+
+  if (results.length === 0) {
+    return {
+      ok: false as const,
+      error: errors.join('; ') || 'No purchase orders created',
+    };
+  }
+
+  return { ok: true as const, orders: results, errors };
 }
 
 export async function createPurchaseOrderFromSuggestion(input: {

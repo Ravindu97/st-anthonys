@@ -6,6 +6,7 @@ import {
   createSuggestionForItem,
   getLocationIdForItemCategory,
   listPurchaseSuggestions,
+  revertSuggestionToDraft,
   syncPurchaseSuggestions,
   updatePurchaseSuggestionStatus,
   updateSuggestionQty,
@@ -76,6 +77,14 @@ export async function POST(request: Request) {
       count++;
     }
     return NextResponse.json({ updated: count });
+  }
+
+  if (body.action === 'revert_to_draft' && body.id) {
+    const updated = await revertSuggestionToDraft(body.id);
+    if (!updated) {
+      return NextResponse.json({ error: 'Not found or not approved' }, { status: 400 });
+    }
+    return NextResponse.json({ suggestion: updated });
   }
 
   if (body.action === 'update_qty' && body.id != null && body.qty != null) {

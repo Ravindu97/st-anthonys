@@ -2,17 +2,20 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { formatLkr } from '@/lib/format';
 import type { ReorderWorkbenchLine } from '@/lib/reorder';
 
 type Supplier = { id: string; code: string; name: string };
 
 export function CreatePoModal({
-  lines,
+  vendorCode,
   vendorName,
+  lines,
   onClose,
 }: {
-  lines: ReorderWorkbenchLine[];
+  vendorCode: string;
   vendorName: string;
+  lines: ReorderWorkbenchLine[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -30,9 +33,17 @@ export function CreatePoModal({
   useEffect(() => {
     fetch('/api/purchasing/suppliers')
       .then((r) => r.json())
-      .then((d) => setSuppliers(d.suppliers ?? d.items ?? []))
+      .then((d) => {
+        const list: Supplier[] = d.suppliers ?? [];
+        setSuppliers(list);
+        const match =
+          list.find((s) => s.code.toUpperCase() === vendorCode.toUpperCase()) ??
+          list.find((s) => s.name.toUpperCase().includes(vendorCode.toUpperCase())) ??
+          list[0];
+        if (match) setSupplierId(match.id);
+      })
       .catch(() => setError('Could not load suppliers'));
-  }, []);
+  }, [vendorCode]);
 
   async function createPo() {
     if (!supplierId || suggestionIds.length === 0 || !locationId) return;
@@ -46,7 +57,7 @@ export function CreatePoModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'PO creation failed');
-      router.push(`/purchasing/${data.id}`);
+      router.push(`/purchasing/${data.id}/print`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PO creation failed');
@@ -62,7 +73,10 @@ export function CreatePoModal({
           Create PO — {vendorName}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          {suggestionIds.length} lines · LKR {totalValue.toLocaleString('en-LK')}
+          {suggestionIds.length} selected lines · {formatLkr(totalValue)}
+        </p>
+        <p className="mt-2 text-xs text-slate-400">
+          Opens the printable purchase order after creation.
         </p>
 
         <label className="mt-4 block text-sm font-medium text-slate-700">
@@ -94,10 +108,10 @@ export function CreatePoModal({
           <button
             type="button"
             onClick={createPo}
-            disabled={loading || !supplierId}
+            disabled={loading || suggestionIds.length === 0 || !supplierId}
             className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
           >
-            {loading ? 'Creating…' : 'Create purchase order'}
+            {loading ? 'Creating…' : 'Create & open PO'}
           </button>
         </div>
       </div>

@@ -314,6 +314,12 @@ export async function getReorderWorkbench(opts?: {
       AND b.effective_min_qty IS NOT NULL
       AND b.current_qty < b.effective_min_qty
       AND NOT b.needs_rule
+      AND NOT EXISTS (
+        SELECT 1 FROM purchase_suggestions ps_ex
+        WHERE ps_ex.stock_item_id = b.stock_item_id
+          AND ps_ex.location_id = b.location_id
+          AND ps_ex.status IN ('approved', 'converted')
+      )
     `;
   } else if (tab === 'approved') {
     psJoin = `JOIN purchase_suggestions ps
@@ -789,9 +795,24 @@ export async function listPurchaseSuggestions(opts?: {
   return { items, totalCount, page, pageSize };
 }
 
+export async function revertSuggestionToDraft(id: string) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `UPDATE purchase_suggestions SET
+       status = 'draft',
+       updated_at = now(),
+       approved_at = NULL,
+       approved_by = NULL
+     WHERE id = $1 AND status = 'approved'
+     RETURNING *`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
 export async function updatePurchaseSuggestionStatus(
   id: string,
-  status: 'approved' | 'cancelled' | 'converted',
+  status: 'approved' | 'cancelled' | 'converted' | 'draft',
   userId?: string,
   dismissedNote?: string
 ) {

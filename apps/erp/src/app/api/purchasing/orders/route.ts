@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
 import {
+  createBulkPurchaseOrdersByVendor,
   createPurchaseOrderFromSuggestion,
   createPurchaseOrderFromSuggestions,
   listPurchaseOrders,
@@ -25,6 +26,17 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const body = await request.json();
   const companyId = await getDefaultCompanyId();
+
+  if (body.action === 'bulk_by_vendor' && Array.isArray(body.batches)) {
+    const result = await createBulkPurchaseOrdersByVendor({
+      companyId,
+      batches: body.batches,
+      notes: body.notes,
+      createdBy: auth.user.id !== 'api-key' ? auth.user.id : undefined,
+    });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json(result);
+  }
 
   if (Array.isArray(body.suggestionIds) && body.suggestionIds.length > 0 && body.supplierId) {
     const result = await createPurchaseOrderFromSuggestions({

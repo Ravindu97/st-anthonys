@@ -114,6 +114,55 @@ export function ReorderLineActions({
     );
   }
 
+  async function revertToDraft() {
+    if (!line.suggestion_id) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/reorder/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revert_to_draft', id: line.suggestion_id }),
+      });
+      if (!res.ok) throw new Error('Could not return to queue');
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (tab === 'approved') {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min={0}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="w-20 rounded border border-slate-200 px-2 py-1 font-mono text-xs"
+          aria-label="Order quantity"
+        />
+        <button
+          type="button"
+          onClick={saveQty}
+          disabled={loading || !line.suggestion_id}
+          className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Save qty
+        </button>
+        <button
+          type="button"
+          onClick={revertToDraft}
+          disabled={loading}
+          className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Back to queue
+        </button>
+      </div>
+    );
+  }
+
   if (tab === 'needs_rule') {
     return (
       <a
@@ -127,7 +176,7 @@ export function ReorderLineActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {(tab === 'action' || tab === 'approved') && (
+      {tab === 'action' && (
         <input
           type="number"
           min={0}
