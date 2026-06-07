@@ -1,0 +1,14 @@
+---
+description: Require market/domain research when planning new features
+alwaysApply: true
+---
+
+# Plan mode research
+
+When the user asks for a **new feature** or you enter **Plan mode** for substantial functionality:
+
+1. Do brief market/domain research (2–3 sources: ERP best practices, distributor workflows, comparable products).
+2. In the plan, include a table: industry practice → applicable now vs deferred.
+3. Scope Phase 1 to what fits this codebase and team; defer barcode, QC quarantine, full AP 3-way match unless explicitly requested.
+
+See [`.github/cursor-instructions.md`](../../.github/cursor-instructions.md) for the full checklist and verification flows.

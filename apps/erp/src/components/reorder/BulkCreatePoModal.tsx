@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { formatLkr } from '@/lib/format';
@@ -14,6 +15,8 @@ type VendorGroup = {
   locationId: string;
 };
 
+type CreatedOrder = { id: string; poNumber: string; vendorCode: string };
+
 export function BulkCreatePoModal({
   selectedLines,
   onClose,
@@ -27,6 +30,7 @@ export function BulkCreatePoModal({
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdOrders, setCreatedOrders] = useState<CreatedOrder[] | null>(null);
 
   const vendorGroups = useMemo(() => {
     const map = new Map<string, VendorGroup>();
@@ -106,17 +110,69 @@ export function BulkCreatePoModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Bulk PO creation failed');
 
-      if (data.orders?.length === 1) {
-        router.push(`/purchasing/${data.orders[0].id}/print`);
-      } else {
-        router.push('/purchasing');
-      }
+      setCreatedOrders(
+        (data.orders ?? []).map((o: { id: string; poNumber: string; vendorCode: string }) => ({
+          id: o.id,
+          poNumber: o.poNumber,
+          vendorCode: o.vendorCode,
+        }))
+      );
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk PO creation failed');
     } finally {
       setLoading(false);
     }
+  }
+
+  if (createdOrders) {
+    const single = createdOrders.length === 1 ? createdOrders[0] : null;
+    return (
+      <ModalShell title="Purchase orders created" onClose={onClose}>
+        <p className="text-sm text-slate-600">
+          {createdOrders.length} PO{createdOrders.length === 1 ? '' : 's'} created. Receive goods
+          when deliveries arrive to sync inventory.
+        </p>
+        <ul className="mt-4 space-y-2">
+          {createdOrders.map((o) => (
+            <li
+              key={o.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            >
+              <span className="font-mono font-medium">{o.poNumber}</span>
+              <div className="flex gap-2">
+                <Link
+                  href={`/purchasing/${o.id}#receive`}
+                  className="text-emerald-700 hover:underline"
+                >
+                  Receive
+                </Link>
+                <Link
+                  href={`/purchasing/${o.id}/print`}
+                  className="text-brand-blue-600 hover:underline"
+                >
+                  Print
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {single && (
+          <Link
+            href={`/purchasing/${single.id}#receive`}
+            className="mt-4 block rounded-lg bg-emerald-600 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-emerald-700"
+          >
+            Receive goods for {single.poNumber}
+          </Link>
+        )}
+        <Link
+          href="/purchasing?filter=awaiting"
+          className="mt-3 block text-center text-sm text-brand-blue-600 hover:underline"
+        >
+          View all awaiting receipt
+        </Link>
+      </ModalShell>
+    );
   }
 
   if (selectedLines.length === 0) {
@@ -190,7 +246,11 @@ export function BulkCreatePoModal({
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+        >
           Cancel
         </button>
         <button
@@ -223,11 +283,13 @@ function ModalShell({
         <h2 className="font-display text-lg font-semibold text-slate-900">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
         <div className="mt-4">{children}</div>
-        {!subtitle && (
-          <button type="button" onClick={onClose} className="mt-4 text-sm text-brand-blue-600 hover:underline">
-            Close
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 text-sm text-brand-blue-600 hover:underline"
+        >
+          Close
+        </button>
       </div>
     </div>
   );

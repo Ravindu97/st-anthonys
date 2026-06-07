@@ -7,6 +7,15 @@ Project-specific guidance for AI assistants working in this repo.
 Always follow rules in [`.cursor/rules/`](../.cursor/rules/), especially:
 
 - **`verify-before-done.mdc`** — Test new functionality before marking work complete.
+- **`plan-mode-research.mdc`** — Research best practices before proposing new features.
+
+## Plan mode (new features)
+
+Before proposing a **new feature** in Plan mode:
+
+1. Do brief market/domain research (2–3 authoritative sources).
+2. Document in the plan: industry practice → **applicable now** vs **deferred**.
+3. Keep Phase 1 scoped to this codebase (desktop-first, Tally snapshots, distributor workflows).
 
 ## Verification checklist
 
@@ -30,8 +39,9 @@ Loading a page once is not enough. Exercise the full user path:
 | Area | Minimum manual or scripted checks |
 |------|-----------------------------------|
 | Audit log | Open `/admin/audit`, toggle workflows/events, apply a filter, click **Open record** on a workflow, confirm the target page loads (e.g. PO detail with activity panel). |
-| Purchasing | Open a PO from the list and from an audit deep link; confirm attribution and admin activity panel render. |
-| Reorder | Search, paginate, create PO from selection, open print view. |
+| Purchasing / GRN | Create PO from reorder → **Receive goods** (partial then complete) → confirm PO status, `/purchasing/receipts` list, GRN print, inventory unit ledger shows `GRN GRN-xxxxx`. |
+| Purchasing list | **Awaiting receipt** filter, receipt progress column, `#receive` anchor on partial POs. |
+| Reorder | Search, paginate, create PO from selection, success modal with receive CTA, history tab PO/receipt badge. |
 
 If auth blocks automated checks, run the query/API path directly (e.g. call the lib function against the dev DB) and tell the user what to click to confirm in the browser.
 
@@ -46,6 +56,7 @@ If auth blocks automated checks, run the query/API path directly (e.g. call the 
 - Server-only data access: `apps/erp/src/lib/*.ts` using `getPool()`.
 - Client-safe shared code: `*-shared.ts` modules with no Node/database imports.
 - Admin routes: `/admin/*` and `/api/admin/*` are admin-only (see `middleware.ts`).
+- GRN posts to latest `inventory_snapshots` balance + `stock_movements` (`purchase_receipt`); strict block on over-receipt.
 
 ## Reporting completion
 

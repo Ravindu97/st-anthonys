@@ -1,7 +1,7 @@
 import { BrandMark } from '@/components/BrandMark';
 import { formatLkr } from '@/lib/format';
 import type { CompanyProfile } from '@/lib/company-profile';
-import type { PurchaseOrderDocument as PoDoc } from '@/lib/purchasing';
+import type { GoodsReceiptDocument as GrnDoc } from '@/lib/purchasing';
 
 function formatDate(d: Date | string | null) {
   if (!d) return '—';
@@ -29,22 +29,19 @@ function formatQty(value: string | number) {
     : String(value);
 }
 
-export function PurchaseOrderDocument({
+export function GrnDocument({
   document,
   company,
   printMode = false,
-  showReceiptColumns = false,
 }: {
-  document: PoDoc;
+  document: GrnDoc;
   company: CompanyProfile;
   printMode?: boolean;
-  showReceiptColumns?: boolean;
 }) {
-  const { order, lines } = document;
+  const { receipt, purchase_order: po, lines } = document;
   const b = company.branding;
-  const itemCount = lines.length;
   const totalQty = lines.reduce((s, l) => s + Number(l.quantity), 0);
-  const receiptCols = showReceiptColumns && !printMode;
+  const totalValue = lines.reduce((s, l) => s + Number(l.line_total), 0);
 
   return (
     <article
@@ -53,7 +50,6 @@ export function PurchaseOrderDocument({
       }`}
     >
       <div className="po-doc-body">
-        {/* Header — distributor invoice layout */}
         <div className="po-doc-top grid gap-4 border-b border-slate-400 pb-4 sm:grid-cols-[auto_1fr_auto]">
           <div className="flex gap-3">
             <BrandMark size="lg" />
@@ -62,7 +58,7 @@ export function PurchaseOrderDocument({
                 St. Anthony&apos;s
               </p>
               <p className="text-[10px] font-bold tracking-widest text-slate-600 uppercase">
-                Authorised Distributor
+                Goods Receipt Note
               </p>
             </div>
           </div>
@@ -72,42 +68,26 @@ export function PurchaseOrderDocument({
               <p key={line}>{line}</p>
             ))}
             {b.phone && <p>Tel: {b.phone}</p>}
-            {b.email && <p>{b.email}</p>}
           </div>
 
           <div className="text-right text-xs text-slate-600 sm:min-w-[9rem]">
-            <p>{formatDateTime(order.created_at)}</p>
-            <p className="mt-1 font-mono font-semibold text-slate-900">{order.po_number}</p>
+            <p>{formatDateTime(receipt.received_at)}</p>
+            <p className="mt-1 font-mono font-semibold text-slate-900">{receipt.grn_number}</p>
           </div>
         </div>
 
-        <h1 className="po-doc-heading mt-4 text-center font-display text-lg font-bold tracking-wide text-slate-900 uppercase">
-          Purchase Order
-        </h1>
-
-        {/* Meta rows — label : value like Tally invoices */}
-        <div className="po-doc-meta mt-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          <Field label="PO No" value={order.po_number} mono />
-          <Field label="Supplier" value={order.supplier_name} />
-          <Field label="PO Date" value={formatDate(order.created_at)} />
-          <Field label="Supplier code" value={order.supplier_code} mono />
-          <Field label="Payment terms" value={`${order.payment_terms_days} days credit`} />
-          <Field label="Product line" value={order.vendor_name} />
-          <Field label="Expected delivery" value={formatDate(order.expected_date)} />
-          <Field label="Status" value={order.status} capitalize />
+        <div className="mt-4 grid gap-1 text-sm sm:grid-cols-2">
+          <Field label="Purchase order" value={po.po_number} mono />
+          <Field label="Supplier" value={`${po.supplier_code} — ${po.supplier_name}`} />
+          <Field label="Location" value={receipt.location_name} />
+          {receipt.location_tally_name &&
+            receipt.location_tally_name !== receipt.location_name && (
+              <Field label="Location (Tally)" value={receipt.location_tally_name} />
+            )}
+          <Field label="Received by" value={receipt.created_by_email ?? '—'} />
+          <Field label="PO status" value={po.status} capitalize />
         </div>
 
-        <div className="po-doc-meta mt-3 border-t border-slate-300 pt-3 text-sm">
-          <Field label="Ship to" value={b.legalName} />
-          <Field label="Deliver to" value={order.location_name} />
-          {order.location_tally_name && order.location_tally_name !== order.location_name && (
-            <Field label="Location (Tally)" value={order.location_tally_name} />
-          )}
-          {order.supplier_phone && <Field label="Supplier tel" value={order.supplier_phone} />}
-          {b.vatNo && <Field label="Buyer VAT" value={b.vatNo} />}
-        </div>
-
-        {/* Lines table */}
         <div className="po-doc-table-wrap mt-5 overflow-x-auto border border-slate-300">
           <table className="po-doc-table w-full min-w-[600px] border-collapse text-sm">
             <thead>
@@ -116,12 +96,6 @@ export function PurchaseOrderDocument({
                 <th className="po-th w-24">Item code</th>
                 <th className="po-th">Description</th>
                 <th className="po-th text-right w-16">Qty</th>
-                {receiptCols && (
-                  <>
-                    <th className="po-th text-right w-16">Received</th>
-                    <th className="po-th text-right w-16">Remaining</th>
-                  </>
-                )}
                 <th className="po-th text-right w-24">Price</th>
                 <th className="po-th text-right w-28">Value</th>
               </tr>
@@ -131,27 +105,10 @@ export function PurchaseOrderDocument({
                 <tr key={line.id}>
                   <td className="po-td text-center font-mono text-xs">{line.line_no}</td>
                   <td className="po-td font-mono text-xs">{line.primary_sku ?? '—'}</td>
-                  <td className="po-td">
-                    {line.item_name}
-                    {line.stock_group_name && (
-                      <span className="block text-xs text-slate-500">{line.stock_group_name}</span>
-                    )}
-                  </td>
+                  <td className="po-td">{line.item_name}</td>
                   <td className="po-td text-right font-mono tabular-nums">
                     {formatQty(line.quantity)}
                   </td>
-                  {receiptCols && (
-                    <>
-                      <td className="po-td text-right font-mono tabular-nums text-slate-600">
-                        {formatQty(line.received_qty)}
-                      </td>
-                      <td className="po-td text-right font-mono tabular-nums font-medium">
-                        {formatQty(
-                          Math.max(0, Number(line.quantity) - Number(line.received_qty))
-                        )}
-                      </td>
-                    </>
-                  )}
                   <td className="po-td text-right font-mono tabular-nums">
                     {formatLkr(line.unit_rate)}
                   </td>
@@ -164,47 +121,28 @@ export function PurchaseOrderDocument({
           </table>
         </div>
 
-        {/* Totals row */}
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4 text-sm">
           <p className="text-slate-700">
-            Total no. of items: <span className="font-mono font-semibold">{itemCount}</span>
+            Lines: <span className="font-mono font-semibold">{lines.length}</span>
             <span className="mx-2 text-slate-300">|</span>
             Total qty: <span className="font-mono font-semibold">{formatQty(totalQty)}</span>
           </p>
           <div className="po-doc-total-box min-w-[14rem] border border-slate-400 px-4 py-2 text-right">
-            <p className="text-xs text-slate-600 uppercase">PO value (LKR)</p>
-            <p className="font-mono text-lg font-bold text-slate-900">
-              {formatLkr(order.total_amount)}
-            </p>
+            <p className="text-xs text-slate-600 uppercase">Received value (LKR)</p>
+            <p className="font-mono text-lg font-bold text-slate-900">{formatLkr(totalValue)}</p>
           </div>
         </div>
 
-        {order.notes && (
+        {receipt.notes && (
           <p className="mt-4 border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-            <span className="font-semibold">Note:</span> {order.notes}
+            <span className="font-semibold">Note:</span> {receipt.notes}
           </p>
         )}
 
-        <div className="po-doc-signatures mt-8 grid gap-10 border-t border-slate-300 pt-5 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold text-slate-600 uppercase">Prepared by</p>
-            <div className="po-signature-line mt-12" />
-            <p className="mt-1 text-xs text-slate-500">Name & signature</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-600 uppercase">
-              Authorized by supplier
-            </p>
-            <div className="po-signature-line mt-12" />
-            <p className="mt-1 text-xs text-slate-500">Stamp / signature / date</p>
-          </div>
-        </div>
-
         <p className="po-doc-footer mt-6 border-t border-slate-300 pt-3 text-center text-[10px] text-slate-500">
           {b.displayName}
-          {b.vatNo ? ` · VAT ${b.vatNo}` : ''}
           <br />
-          {order.po_number} · Printed {formatDateTime(new Date())}
+          {receipt.grn_number} · PO {po.po_number} · Printed {formatDate(new Date())}
         </p>
       </div>
     </article>

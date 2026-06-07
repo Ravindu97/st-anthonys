@@ -65,6 +65,9 @@ export type ReorderWorkbenchLine = {
   approved_by_email: string | null;
   snapshot_imported_at: Date | null;
   reorder_rule_id: string | null;
+  po_id: string | null;
+  po_number: string | null;
+  po_status: string | null;
 };
 
 export type ReorderWorkbenchSummary = {
@@ -370,6 +373,9 @@ export async function getReorderWorkbench(opts?: {
       ps.suggested_qty,
       ps.user_adjusted_qty,
       ps.estimated_value,
+      po.id AS po_id,
+      po.po_number,
+      po.status AS po_status,
       COUNT(*) OVER()::int AS total_count
     FROM balances b
     JOIN stock_items si ON si.id = b.stock_item_id
@@ -378,6 +384,7 @@ export async function getReorderWorkbench(opts?: {
       WHERE item_id = si.id AND is_primary = true LIMIT 1
     ) a ON true
     ${psJoin}
+    LEFT JOIN purchase_orders po ON po.suggestion_id = ps.id
     LEFT JOIN app_users approver ON approver.id = ps.approved_by
     WHERE 1=1 ${tabFilter} ${vendorFilter} ${searchFilter}
     ORDER BY
@@ -434,6 +441,9 @@ export async function getReorderWorkbench(opts?: {
       approved_by_email: r.approved_by_email ?? null,
       snapshot_imported_at: r.snapshot_imported_at,
       reorder_rule_id: r.reorder_rule_id,
+      po_id: r.po_id ?? null,
+      po_number: r.po_number ?? null,
+      po_status: r.po_status ?? null,
     };
   });
 

@@ -348,10 +348,19 @@ export async function getPurchaseOrderAttribution(poId: string) {
   if (po.length === 0) return null;
 
   const { rows: grns } = await pool.query(
-    `SELECT gr.id, gr.grn_number, gr.received_at, gr.created_at, u.email AS created_by_email
+    `SELECT
+       gr.id,
+       gr.grn_number,
+       gr.received_at,
+       gr.created_at,
+       u.email AS created_by_email,
+       COUNT(grl.id)::int AS line_count,
+       COALESCE(SUM(grl.quantity), 0)::numeric AS total_qty
      FROM goods_receipts gr
      LEFT JOIN app_users u ON u.id = gr.created_by
+     LEFT JOIN goods_receipt_lines grl ON grl.goods_receipt_id = gr.id
      WHERE gr.purchase_order_id = $1::uuid
+     GROUP BY gr.id, u.email
      ORDER BY gr.created_at`,
     [poId]
   );
@@ -370,6 +379,8 @@ export async function getPurchaseOrderAttribution(poId: string) {
       received_at: Date;
       created_at: Date;
       created_by_email: string | null;
+      line_count: number;
+      total_qty: string;
     }>,
   };
 }

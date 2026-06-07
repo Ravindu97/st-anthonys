@@ -21,9 +21,12 @@ type Attribution = {
     status: string;
   };
   grns: Array<{
+    id: string;
     grn_number: string;
     created_at: Date;
     created_by_email: string | null;
+    line_count: number;
+    total_qty: string;
   }>;
 };
 
@@ -88,15 +91,19 @@ export function EntityActivityPanel({
           <ul className="mt-2 space-y-2">
             {grns.map((grn) => (
               <li
-                key={grn.grn_number}
+                key={grn.id}
                 className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
               >
-                <span className="font-mono text-xs font-medium text-slate-800">
+                <Link
+                  href={`/purchasing/receipts/${grn.id}/print`}
+                  className="font-mono text-xs font-medium text-brand-blue-600 hover:underline"
+                >
                   {grn.grn_number}
-                </span>
+                </Link>
                 <span className="mt-0.5 block text-xs text-slate-500">
-                  Received by {grn.created_by_email ?? 'Unknown'} ·{' '}
-                  {formatWhen(grn.created_at)}
+                  {grn.line_count} line{grn.line_count === 1 ? '' : 's'} ·{' '}
+                  {Number(grn.total_qty).toLocaleString()} qty ·{' '}
+                  {grn.created_by_email ?? 'Unknown'} · {formatWhen(grn.created_at)}
                 </span>
               </li>
             ))}

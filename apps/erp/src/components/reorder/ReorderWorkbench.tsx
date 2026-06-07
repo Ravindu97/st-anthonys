@@ -371,6 +371,9 @@ export function ReorderWorkbench({
                           {(tab === 'approved' || tab === 'history') && (
                             <th className="px-4 py-2">Approved by</th>
                           )}
+                          {tab === 'history' && (
+                            <th className="px-4 py-2">PO / Receipt</th>
+                          )}
                           <th className="px-4 py-2">Actions</th>
                         </tr>
                       </thead>
@@ -417,6 +420,43 @@ export function ReorderWorkbench({
                                     <span className="block text-[10px] text-slate-400">
                                       {new Date(line.approved_at).toLocaleDateString('en-GB')}
                                     </span>
+                                  )}
+                                </td>
+                              )}
+                              {tab === 'history' && (
+                                <td className="px-4 py-2 text-xs">
+                                  {line.po_number ? (
+                                    <>
+                                      <Link
+                                        href={
+                                          line.po_status === 'partial' || line.po_status === 'draft'
+                                            ? `/purchasing/${line.po_id}#receive`
+                                            : `/purchasing/${line.po_id}`
+                                        }
+                                        className="font-mono text-brand-blue-600 hover:underline"
+                                      >
+                                        {line.po_number}
+                                      </Link>
+                                      <span
+                                        className={`mt-0.5 block text-[10px] font-medium ${
+                                          line.po_status === 'received'
+                                            ? 'text-emerald-600'
+                                            : line.po_status === 'partial'
+                                              ? 'text-amber-600'
+                                              : 'text-slate-500'
+                                        }`}
+                                      >
+                                        {line.po_status === 'received'
+                                          ? 'Received'
+                                          : line.po_status === 'partial'
+                                            ? 'Partial'
+                                            : line.po_status === 'cancelled'
+                                              ? 'Cancelled'
+                                              : 'Awaiting'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
                                   )}
                                 </td>
                               )}

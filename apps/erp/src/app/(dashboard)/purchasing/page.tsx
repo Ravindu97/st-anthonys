@@ -4,9 +4,15 @@ import { listPurchaseOrders, listSuppliers } from '@/lib/purchasing';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PurchasingPage() {
+export default async function PurchasingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>;
+}) {
+  const params = await searchParams;
+  const awaitingOnly = params.filter === 'awaiting';
   const [orders, suppliers] = await Promise.all([
-    listPurchaseOrders(),
+    listPurchaseOrders({ awaitingReceipt: awaitingOnly }),
     listSuppliers(),
   ]);
 
@@ -14,14 +20,45 @@ export default async function PurchasingPage() {
     <div className="space-y-6">
       <PageBreadcrumbs items={[{ label: 'Purchasing' }]} />
 
-      <header>
-        <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
-          Purchasing
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Purchase orders and goods receipt — linked to reorder suggestions
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl font-semibold text-slate-900 sm:text-2xl">
+            Purchasing
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Purchase orders and goods receipt — linked to reorder suggestions
+          </p>
+        </div>
+        <Link
+          href="/purchasing/receipts"
+          className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Goods receipts
+        </Link>
       </header>
+
+      <nav className="flex flex-wrap gap-2 text-sm">
+        <Link
+          href="/purchasing"
+          className={`rounded-lg px-3 py-1.5 ${
+            !awaitingOnly
+              ? 'bg-brand-blue-50 font-medium text-brand-blue-700'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          All POs
+        </Link>
+        <Link
+          href="/purchasing?filter=awaiting"
+          className={`rounded-lg px-3 py-1.5 ${
+            awaitingOnly
+              ? 'bg-brand-blue-50 font-medium text-brand-blue-700'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          Awaiting receipt
+        </Link>
+      </nav>
 
       <section>
         <h2 className="text-sm font-semibold text-slate-700 mb-2">
@@ -46,6 +83,7 @@ export default async function PurchasingPage() {
               <th className="px-4 py-3">PO #</th>
               <th className="px-4 py-3">Supplier</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Receipt</th>
               <th className="px-4 py-3">Created by</th>
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3 text-right">Lines</th>
@@ -56,7 +94,11 @@ export default async function PurchasingPage() {
               <tr key={o.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 font-mono text-xs">
                   <Link
-                    href={`/purchasing/${o.id}`}
+                    href={
+                      o.status === 'partial' || o.status === 'draft'
+                        ? `/purchasing/${o.id}#receive`
+                        : `/purchasing/${o.id}`
+                    }
                     className="text-brand-blue-600 hover:underline"
                   >
                     {o.po_number}
@@ -64,6 +106,7 @@ export default async function PurchasingPage() {
                 </td>
                 <td className="px-4 py-2">{o.supplier_name}</td>
                 <td className="px-4 py-2 capitalize">{o.status}</td>
+                <td className="px-4 py-2 text-xs text-slate-600">{o.receipt_label}</td>
                 <td className="px-4 py-2 text-xs text-slate-600">
                   {o.created_by_email ?? '—'}
                 </td>
@@ -77,11 +120,20 @@ export default async function PurchasingPage() {
         </table>
         {orders.items.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-500">
-            No purchase orders yet. Approve lines in the{' '}
-            <Link href="/inventory/reorder?tab=approved" className="text-brand-blue-600 hover:underline">
-              reorder hub
-            </Link>{' '}
-            and create POs by vendor.
+            {awaitingOnly
+              ? 'No purchase orders awaiting receipt.'
+              : 'No purchase orders yet. Approve lines in the '}
+            {!awaitingOnly && (
+              <>
+                <Link
+                  href="/inventory/reorder?tab=approved"
+                  className="text-brand-blue-600 hover:underline"
+                >
+                  reorder hub
+                </Link>{' '}
+                and create POs by vendor.
+              </>
+            )}
           </p>
         )}
       </div>
@@ -90,7 +142,7 @@ export default async function PurchasingPage() {
         <Link href="/inventory/reorder" className="text-brand-blue-600 hover:underline">
           Reorder hub
         </Link>{' '}
-        → approve → create PO per vendor
+        → approve → create PO → receive goods
       </p>
     </div>
   );

@@ -22,5 +22,13 @@ export async function POST(
     notes: body.notes,
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json(result);
+  return NextResponse.json({
+    ok: true,
+    grnNumber: result.grnNumber,
+    grnId: result.grnId,
+    poStatus: result.poStatus,
+    linesReceived: result.linesReceived,
+    inventoryUpdated: result.inventoryUpdated,
+    locationName: result.locationName,
+  });
 }
