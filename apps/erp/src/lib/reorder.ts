@@ -152,8 +152,25 @@ export async function upsertReorderRule(input: {
   minQty: number;
   reorderQty: number;
   leadTimeDays?: number;
+  actorId?: string;
+  source?: AuditSource;
+  skipAudit?: boolean;
 }) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT rr.*, loc.company_id, si.name AS item_name, a.alias AS primary_sku,
+            cat.code AS category_code
+     FROM reorder_rules rr
+     JOIN locations loc ON loc.id = rr.location_id
+     JOIN stock_items si ON si.id = rr.stock_item_id
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE rr.stock_item_id = $1 AND rr.location_id = $2`,
+    [input.stockItemId, input.locationId]
+  );
+
   const { rows } = await pool.query(
     `INSERT INTO reorder_rules (
        stock_item_id, location_id, min_qty, reorder_qty, lead_time_days
@@ -173,7 +190,73 @@ export async function upsertReorderRule(input: {
       input.leadTimeDays ?? 0,
     ]
   );
-  return rows[0] as ReorderRule;
+  const rule = rows[0] as ReorderRule;
+
+  const { rows: meta } = await pool.query(
+    `SELECT loc.company_id, si.name AS item_name, a.alias AS primary_sku,
+            cat.code AS category_code
+     FROM locations loc
+     JOIN stock_items si ON si.id = $1
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE loc.id = $2`,
+    [input.stockItemId, input.locationId]
+  );
+  const m = meta[0];
+  if (m && !input.skipAudit) {
+    const changes: { field: string; old: unknown; new: unknown }[] = [];
+    if (before[0]) {
+      if (Number(before[0].min_qty) !== input.minQty) {
+        changes.push({ field: 'min_qty', old: Number(before[0].min_qty), new: input.minQty });
+      }
+      if (Number(before[0].reorder_qty) !== input.reorderQty) {
+        changes.push({
+          field: 'reorder_qty',
+          old: Number(before[0].reorder_qty),
+          new: input.reorderQty,
+        });
+      }
+      if (Number(before[0].lead_time_days) !== (input.leadTimeDays ?? 0)) {
+        changes.push({
+          field: 'lead_time_days',
+          old: Number(before[0].lead_time_days),
+          new: input.leadTimeDays ?? 0,
+        });
+      }
+    } else {
+      changes.push(
+        { field: 'min_qty', old: null, new: input.minQty },
+        { field: 'reorder_qty', old: null, new: input.reorderQty }
+      );
+    }
+    const label = (m.primary_sku as string) ?? (m.item_name as string);
+    await recordAuditEvent(pool, {
+      companyId: m.company_id as string,
+      entityType: 'reorder_rule',
+      entityId: rule.id,
+      action: 'reorder.rule_upserted',
+      actorId: input.actorId,
+      summary: before[0]
+        ? `Updated reorder rule for ${label}`
+        : `Created reorder rule for ${label}`,
+      recordLabel: m.primary_sku ? `SKU ${m.primary_sku}` : null,
+      correlationId: newCorrelationId(),
+      source: input.source ?? 'api',
+      changes,
+      metadata: {
+        stockItemId: input.stockItemId,
+        locationId: input.locationId,
+        itemName: m.item_name,
+        primarySku: m.primary_sku,
+        vendorSlug: String(m.category_code ?? '').toLowerCase() || null,
+        minQty: input.minQty,
+        reorderQty: input.reorderQty,
+      },
+    });
+  }
+  return rule;
 }
 
 export async function listCategoryDefaults() {
@@ -192,8 +275,18 @@ export async function upsertCategoryDefault(input: {
   locationType?: string;
   defaultMinQty: number;
   defaultReorderQty: number;
+  actorId?: string;
+  source?: AuditSource;
 }) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT rcd.*, cat.code AS category_code, cat.name AS category_name, cat.company_id
+     FROM reorder_category_defaults rcd
+     JOIN stock_categories cat ON cat.id = rcd.category_id
+     WHERE rcd.category_id = $1 AND rcd.location_type = $2::location_type`,
+    [input.categoryId, input.locationType ?? 'main']
+  );
+
   const { rows } = await pool.query(
     `INSERT INTO reorder_category_defaults (
        category_id, location_type, default_min_qty, default_reorder_qty
@@ -210,6 +303,53 @@ export async function upsertCategoryDefault(input: {
       input.defaultReorderQty,
     ]
   );
+
+  const { rows: cat } = await pool.query(
+    `SELECT code, name, company_id FROM stock_categories WHERE id = $1`,
+    [input.categoryId]
+  );
+  if (cat[0]) {
+    const changes: { field: string; old: unknown; new: unknown }[] = [];
+    if (before[0]) {
+      if (Number(before[0].default_min_qty) !== input.defaultMinQty) {
+        changes.push({
+          field: 'default_min_qty',
+          old: Number(before[0].default_min_qty),
+          new: input.defaultMinQty,
+        });
+      }
+      if (Number(before[0].default_reorder_qty) !== input.defaultReorderQty) {
+        changes.push({
+          field: 'default_reorder_qty',
+          old: Number(before[0].default_reorder_qty),
+          new: input.defaultReorderQty,
+        });
+      }
+    } else {
+      changes.push(
+        { field: 'default_min_qty', old: null, new: input.defaultMinQty },
+        { field: 'default_reorder_qty', old: null, new: input.defaultReorderQty }
+      );
+    }
+    await recordAuditEvent(pool, {
+      companyId: cat[0].company_id as string,
+      entityType: 'reorder_rule',
+      entityId: rows[0].id,
+      action: 'reorder.category_default_upserted',
+      actorId: input.actorId,
+      summary: `${cat[0].name}: default min ${input.defaultMinQty}, reorder ${input.defaultReorderQty}`,
+      recordLabel: cat[0].code as string,
+      correlationId: newCorrelationId(),
+      source: input.source ?? 'api',
+      changes,
+      metadata: {
+        categoryId: input.categoryId,
+        categoryCode: cat[0].code,
+        categoryName: cat[0].name,
+        locationType: input.locationType ?? 'main',
+      },
+    });
+  }
   return rows[0];
 }
 
@@ -551,6 +691,8 @@ export async function syncPurchaseSuggestions(
 
     const cte = workbenchBalancesCte(companyFilter, params.length);
 
+    const scanCorrelationId = opts?.correlationId ?? newCorrelationId();
+
     const { rows: belowReorder } = await client.query(
       `
       ${cte}
@@ -565,8 +707,15 @@ export async function syncPurchaseSuggestions(
         b.rate,
         b.snapshot_imported_at,
         b.has_rule,
-        b.has_category_default
+        b.has_category_default,
+        b.vendor_slug,
+        si.name AS item_name,
+        a.alias AS primary_sku
       FROM balances b
+      JOIN stock_items si ON si.id = b.stock_item_id
+      LEFT JOIN LATERAL (
+        SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+      ) a ON true
       WHERE b.effective_min_qty IS NOT NULL
         AND b.current_qty < b.effective_min_qty
         AND (b.has_rule OR b.has_category_default)
@@ -587,7 +736,7 @@ export async function syncPurchaseSuggestions(
       const estimatedValue = suggestedQty * (rate ?? 0);
 
       const { rows: existing } = await client.query(
-        `SELECT id, status, current_qty FROM purchase_suggestions
+        `SELECT id, status, current_qty, suggested_qty FROM purchase_suggestions
          WHERE stock_item_id = $1 AND location_id = $2
            AND status IN ('draft', 'approved')
          LIMIT 1`,
@@ -596,6 +745,7 @@ export async function syncPurchaseSuggestions(
 
       if (existing.length > 0) {
         if (existing[0].status === 'draft') {
+          const prevQty = Number(existing[0].current_qty);
           await client.query(
             `UPDATE purchase_suggestions SET
                current_qty = $2, min_qty = $3, suggested_qty = $4,
@@ -613,16 +763,38 @@ export async function syncPurchaseSuggestions(
             ]
           );
           updated++;
+          if (companyId && (prevQty !== currentQty || Number(existing[0].suggested_qty) !== suggestedQty)) {
+            const label = row.primary_sku ?? row.item_name;
+            await recordAuditEvent(client, {
+              companyId: row.company_id,
+              entityType: 'purchase_suggestion',
+              entityId: existing[0].id,
+              action: 'suggestion.auto_updated',
+              actorId: null,
+              summary: `Scan updated ${label}: qty ${suggestedQty}`,
+              recordLabel: row.primary_sku ? `SKU ${row.primary_sku}` : null,
+              correlationId: scanCorrelationId,
+              source: opts?.source ?? 'system',
+              metadata: {
+                itemName: row.item_name,
+                primarySku: row.primary_sku,
+                vendorSlug: row.vendor_slug,
+                currentQty,
+                suggestedQty,
+              },
+            });
+          }
         }
         continue;
       }
 
-      await client.query(
+      const { rows: inserted } = await client.query(
         `INSERT INTO purchase_suggestions (
            company_id, stock_item_id, location_id, reorder_rule_id,
            current_qty, min_qty, suggested_qty, status,
            rate_at_scan, estimated_value, snapshot_imported_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10)`,
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10)
+         RETURNING id`,
         [
           row.company_id,
           row.stock_item_id,
@@ -637,16 +809,43 @@ export async function syncPurchaseSuggestions(
         ]
       );
       created++;
+      if (companyId && inserted[0]) {
+        const label = row.primary_sku ?? row.item_name;
+        await recordAuditEvent(client, {
+          companyId: row.company_id,
+          entityType: 'purchase_suggestion',
+          entityId: inserted[0].id,
+          action: 'suggestion.auto_created',
+          actorId: null,
+          summary: `Scan created suggestion for ${label}: qty ${suggestedQty}`,
+          recordLabel: row.primary_sku ? `SKU ${row.primary_sku}` : null,
+          correlationId: scanCorrelationId,
+          source: opts?.source ?? 'system',
+          metadata: {
+            itemName: row.item_name,
+            primarySku: row.primary_sku,
+            vendorSlug: row.vendor_slug,
+            currentQty,
+            suggestedQty,
+          },
+        });
+      }
     }
 
     // Cancel draft suggestions where stock recovered
     const { rows: recovered } = await client.query(
       `
       ${cte}
-      SELECT ps.id
+      SELECT ps.id, ps.company_id, si.name AS item_name, a.alias AS primary_sku,
+             LOWER(cat.code) AS vendor_slug
       FROM purchase_suggestions ps
       JOIN balances b
         ON b.stock_item_id = ps.stock_item_id AND b.location_id = ps.location_id
+      JOIN stock_items si ON si.id = ps.stock_item_id
+      JOIN stock_categories cat ON cat.id = si.category_id
+      LEFT JOIN LATERAL (
+        SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+      ) a ON true
       WHERE ps.status = 'draft'
         ${companyId ? 'AND ps.company_id = $1' : ''}
         AND b.effective_min_qty IS NOT NULL
@@ -662,6 +861,26 @@ export async function syncPurchaseSuggestions(
         [r.id]
       );
       cancelled++;
+      if (companyId) {
+        const label = r.primary_sku ?? r.item_name;
+        await recordAuditEvent(client, {
+          companyId: r.company_id,
+          entityType: 'purchase_suggestion',
+          entityId: r.id,
+          action: 'suggestion.auto_cancelled',
+          actorId: null,
+          summary: `Scan cancelled ${label} — stock recovered`,
+          recordLabel: r.primary_sku ? `SKU ${r.primary_sku}` : null,
+          correlationId: scanCorrelationId,
+          source: opts?.source ?? 'system',
+          metadata: {
+            itemName: r.item_name,
+            primarySku: r.primary_sku,
+            vendorSlug: r.vendor_slug,
+            reason: 'Stock recovered above min',
+          },
+        });
+      }
     }
 
     let scanRunId: string | null = null;
@@ -683,7 +902,7 @@ export async function syncPurchaseSuggestions(
           actorId: null,
           summary: `Reorder scan: ${created} created, ${updated} updated, ${cancelled} cancelled`,
           recordLabel: 'Reorder scan',
-          correlationId: opts?.correlationId ?? null,
+          correlationId: scanCorrelationId,
           source: opts?.source ?? 'system',
           metadata: {
             itemsBelowMin: belowReorder.length,

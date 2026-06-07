@@ -26,6 +26,12 @@ const ENTITY_TYPES: AuditEntityType[] = [
   'import_run',
   'inventory_adjustment',
   'stock_item',
+  'pos_transaction',
+  'pos_session',
+  'customer',
+  'sales_document',
+  'price_list',
+  'reorder_rule',
 ];
 
 const PRESETS: AuditPreset[] = [
@@ -34,6 +40,10 @@ const PRESETS: AuditPreset[] = [
   'reorder_only',
   'imports',
   'adjustments',
+  'sales',
+  'customers',
+  'pricing',
+  'pos_sales',
 ];
 
 export default async function AdminAuditPage({

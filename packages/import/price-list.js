@@ -4,6 +4,7 @@
  * Expected columns: sku (or unit code), item_name (optional), from_qty, rate, discount_pct (optional)
  */
 
+import { createHash } from 'node:crypto';
 import { getPool } from '../../scripts/lib/db.js';
 
 /**
@@ -14,11 +15,14 @@ import { getPool } from '../../scripts/lib/db.js';
  * @param {string} opts.categoryCode - scope category for the price list
  * @param {string} [opts.applicableFrom] - YYYY-MM-DD
  * @param {boolean} [opts.dryRun]
+ * @param {string} [opts.fileName]
  */
 export async function importPriceListCsv(opts) {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const content = fs.readFileSync(path.resolve(opts.csvPath), 'utf8');
+  const fileName = opts.fileName ?? path.basename(opts.csvPath);
+  const fileHash = createHash('sha256').update(content, 'utf8').digest('hex');
   const lines = content.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) {
     throw new Error('CSV must have a header row and at least one data row');
@@ -53,6 +57,17 @@ export async function importPriceListCsv(opts) {
     const priceLevelId = plRows[0].id;
     const categoryId = catRows[0].id;
     const applicableFrom = opts.applicableFrom ?? new Date().toISOString().slice(0, 10);
+
+    let importRunId = null;
+    if (!opts.dryRun) {
+      const { rows: importRuns } = await client.query(
+        `INSERT INTO import_runs (company_id, source, file_name, file_hash, status)
+         VALUES ($1, 'tally_price_list_csv', $2, $3, 'running')
+         RETURNING id`,
+        [opts.companyId, fileName, fileHash]
+      );
+      importRunId = importRuns[0].id;
+    }
 
     const { rows: listRows } = await client.query(
       `INSERT INTO price_lists (
@@ -108,11 +123,40 @@ export async function importPriceListCsv(opts) {
 
     if (opts.dryRun) {
       await client.query('ROLLBACK');
-      return { imported, errors, dryRun: true, priceListId: null };
+      return {
+        imported,
+        errors,
+        dryRun: true,
+        priceListId: null,
+        importRunId: null,
+        fileName,
+        fileHash,
+      };
+    }
+
+    if (importRunId) {
+      await client.query(
+        `UPDATE import_runs SET status = $2, row_counts = $3::jsonb, error_summary = $4
+         WHERE id = $1`,
+        [
+          importRunId,
+          'completed',
+          JSON.stringify({ imported, errorCount: errors.length }),
+          errors.length > 0 ? `${errors.length} row(s) skipped` : null,
+        ]
+      );
     }
 
     await client.query('COMMIT');
-    return { imported, errors, dryRun: false, priceListId };
+    return {
+      imported,
+      errors,
+      dryRun: false,
+      priceListId,
+      importRunId,
+      fileName,
+      fileHash,
+    };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

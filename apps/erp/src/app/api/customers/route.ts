@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       email: body.email?.trim() || undefined,
       phone: body.phone?.trim() || undefined,
       address: body.address?.trim() || undefined,
+      actorId: auth.user.id !== 'api-key' ? auth.user.id : undefined,
     });
     return NextResponse.json({ customer });
   } catch (err) {

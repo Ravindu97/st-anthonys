@@ -72,12 +72,17 @@ export default async function PriceListDetailPage({
             <dd className="font-mono">{priceList.item_count}</dd>
           </div>
         </dl>
-        <Link
-          href="/pricing"
-          className="mt-3 inline-block text-sm text-brand-blue-600 hover:underline"
-        >
-          Back to all price lists
-        </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <Link href="/pricing" className="text-sm text-brand-blue-600 hover:underline">
+            Back to all price lists
+          </Link>
+          <a
+            href={`/api/pricing/lists/${id}/export`}
+            className="text-sm text-brand-blue-600 hover:underline"
+          >
+            Export CSV
+          </a>
+        </div>
       </header>
 
       <Suspense fallback={null}>

@@ -14,12 +14,21 @@ export async function POST(
   const body = await request.json();
 
   if (body.action === 'update_pick' && body.lineId != null) {
-    const line = await updatePickProgress(id, body.lineId, Number(body.pickedQty));
+    const line = await updatePickProgress(
+      id,
+      body.lineId,
+      Number(body.pickedQty),
+      auth.user.id !== 'api-key' ? auth.user.id : undefined
+    );
     return NextResponse.json({ line });
   }
 
   if (body.action === 'mark_ready') {
-    const doc = await updateSalesStatus(id, 'ready_for_pickup');
+    const doc = await updateSalesStatus(
+      id,
+      'ready_for_pickup',
+      auth.user.id !== 'api-key' ? auth.user.id : undefined
+    );
     return NextResponse.json({ document: doc });
   }
 

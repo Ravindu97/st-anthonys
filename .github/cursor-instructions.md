@@ -38,14 +38,14 @@ Loading a page once is not enough. Exercise the full user path:
 
 | Area | Minimum manual or scripted checks |
 |------|-----------------------------------|
-| Audit log | Open `/admin/audit`, toggle workflows/events, apply a filter, click **Open record** on a workflow, confirm the target page loads (e.g. PO detail with activity panel). |
+| Audit log | Open `/admin/audit`, toggle workflows/events, presets (**Sales**, **Customers**, **Pricing**, **POS sales**, **Reorder only**, **Imports**), click **Open record** on PO/SO/TXN/CUST workflows; customer + sales order detail **Activity** panels for admin. Phase 2: POS session open/close, reorder rule save/import, scan `auto_*` suggestions, price list export + import run row. |
 | Purchasing / GRN | Create PO from reorder → **Receive goods** (partial then complete) → confirm PO status, `/purchasing/receipts` list, GRN print, inventory unit ledger shows `GRN GRN-xxxxx`. |
 | Purchasing list | **Awaiting receipt** filter, receipt progress column, `#receive` anchor on partial POs. |
-| Reorder | Search, paginate, create PO from selection, success modal with receive CTA, history tab PO/receipt badge. |
-| POS counter | Open session → search SKU → attach customer → reprice cart → **mock payment gateway** (card tap / cash tender / account charge) → complete sale → insufficient-stock confirm → View sale / Print receipt → Z-report → close session. |
+| Reorder | Search, paginate, create PO from selection, success modal with receive CTA, history tab PO/receipt badge; save rule (audit) / CSV import (audit); location import triggers scan with `suggestion.auto_*` events grouped with scan workflow. |
+| POS counter | Open session (audit: session opened) → search SKU → attach customer → reprice cart → **mock payment gateway** (card tap / cash tender / account charge) → complete sale → insufficient-stock confirm → View sale / Print receipt → Z-report → close session (audit: session closed). |
 | Sales hub (`/orders`) | **Counter (POS)** tab lists TXN rows → print receipt; **Quotes** → create/print; SO workflow: confirm → pick → **mock payment on collect** (cash/card/account) → collected; search/date filters. |
 | Customers | `/customers` search by name/code/phone → **Add customer** (auto `CUST-#####` code) → detail shows address, terms, sales summary, recent SO/TXN links → **Edit customer**; POS picker shows price tier + office link when no match (no cashier create). |
-| Pricing | `/pricing` filter by level → **Current** badge on active list → import CSV with **Preview** + error table → `/pricing/[id]` search SKU, net price column → **Add/Edit price** exception (admin) → POS verifies rate for customer tier. |
+| Pricing | `/pricing` filter by level → **Current** badge on active list → import CSV with **Preview** + error table (creates `import_runs` row on commit) → `/pricing/[id]` search SKU, net price column → **Export CSV** (audit logged) → **Add/Edit price** exception (admin) → POS verifies rate for customer tier. |
 
 If auth blocks automated checks, run the query/API path directly (e.g. call the lib function against the dev DB) and tell the user what to click to confirm in the browser.
 

@@ -31,7 +31,11 @@ export async function POST(request: Request) {
   }
 
   if (body.action === 'close' && body.sessionId) {
-    const session = await closePosSession(body.sessionId, Number(body.closingCash ?? 0));
+    const session = await closePosSession(
+      body.sessionId,
+      Number(body.closingCash ?? 0),
+      auth.user.id
+    );
     return NextResponse.json({ session });
   }
 

@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { recordAuditEvent } from './audit';
+import { newCorrelationId, recordAuditEvent } from './audit';
 import { getPool } from './db';
 import { resolveItemPrice } from './pricing';
 import { recordStockMovement } from './stock-movements';
@@ -121,22 +121,92 @@ export async function openPosSession(input: {
     return { ok: false as const, error: 'Register already has an open session' };
   }
 
+  const { rows: reg } = await pool.query(
+    `SELECT pr.name AS register_name, pr.company_id
+     FROM pos_registers pr WHERE pr.id = $1::uuid`,
+    [input.registerId]
+  );
+  if (reg.length === 0) {
+    return { ok: false as const, error: 'Register not found' };
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO pos_sessions (register_id, opened_by, opening_cash)
      VALUES ($1::uuid, $2::uuid, $3) RETURNING *`,
     [input.registerId, input.openedBy, input.openingCash ?? 0]
   );
-  return { ok: true as const, session: rows[0] };
+  const session = rows[0];
+  const correlationId = newCorrelationId();
+  await recordAuditEvent(pool, {
+    companyId: reg[0].company_id as string,
+    entityType: 'pos_session',
+    entityId: session.id,
+    action: 'pos.session_opened',
+    actorId: input.openedBy,
+    summary: `Opened POS session on ${reg[0].register_name}`,
+    recordLabel: reg[0].register_name as string,
+    correlationId,
+    source: 'api',
+    metadata: {
+      registerId: input.registerId,
+      registerName: reg[0].register_name,
+      openingCash: input.openingCash ?? 0,
+    },
+  });
+  return { ok: true as const, session };
 }
 
-export async function closePosSession(sessionId: string, closingCash: number) {
+export async function closePosSession(
+  sessionId: string,
+  closingCash: number,
+  actorId?: string
+) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT ps.*, pr.name AS register_name, pr.company_id
+     FROM pos_sessions ps
+     JOIN pos_registers pr ON pr.id = ps.register_id
+     WHERE ps.id = $1::uuid AND ps.closed_at IS NULL`,
+    [sessionId]
+  );
+  if (before.length === 0) return null;
+
   const { rows } = await pool.query(
     `UPDATE pos_sessions SET closed_at = now(), closing_cash = $2
      WHERE id = $1::uuid AND closed_at IS NULL RETURNING *`,
     [sessionId, closingCash]
   );
-  return rows[0] ?? null;
+  const session = rows[0];
+  if (session) {
+    const correlationId = await (async () => {
+      const { rows: prior } = await pool.query(
+        `SELECT correlation_id FROM audit_events
+         WHERE entity_type = 'pos_session' AND entity_id = $1::uuid
+           AND action = 'pos.session_opened' AND correlation_id IS NOT NULL
+         LIMIT 1`,
+        [sessionId]
+      );
+      return (prior[0]?.correlation_id as string | undefined) ?? newCorrelationId();
+    })();
+    await recordAuditEvent(pool, {
+      companyId: before[0].company_id as string,
+      entityType: 'pos_session',
+      entityId: sessionId,
+      action: 'pos.session_closed',
+      actorId: actorId ?? (before[0].opened_by as string),
+      summary: `Closed POS session on ${before[0].register_name}`,
+      recordLabel: before[0].register_name as string,
+      correlationId,
+      source: 'api',
+      metadata: {
+        registerId: before[0].register_id,
+        registerName: before[0].register_name,
+        openingCash: Number(before[0].opening_cash),
+        closingCash,
+      },
+    });
+  }
+  return session ?? null;
 }
 
 export async function getOpenSession(registerId: string) {
@@ -585,6 +655,7 @@ export async function createPosTransaction(input: {
       [txn[0].id, subtotal]
     );
 
+    const correlationId = newCorrelationId();
     await recordAuditEvent(client, {
       companyId: session.company_id as string,
       entityType: 'pos_transaction',
@@ -593,6 +664,7 @@ export async function createPosTransaction(input: {
       actorId: input.actorId,
       summary: `POS sale ${txnNumber} — ${pricedLines.length} line(s), ${input.paymentMethod}`,
       recordLabel: txnNumber,
+      correlationId,
       source: 'api',
       metadata: {
         transactionNumber: txnNumber,
@@ -604,6 +676,28 @@ export async function createPosTransaction(input: {
         locationName: session.location_name,
       },
     });
+
+    if (input.paymentReference) {
+      await recordAuditEvent(client, {
+        companyId: session.company_id as string,
+        entityType: 'pos_transaction',
+        entityId: txn[0].id as string,
+        action: 'payment.mock_completed',
+        actorId: input.actorId,
+        summary: `Payment ${input.paymentMethod} — ${txnNumber}`,
+        recordLabel: txnNumber,
+        correlationId,
+        source: 'api',
+        metadata: {
+          targetType: 'pos',
+          targetId: txn[0].id as string,
+          method: input.paymentMethod,
+          paymentReference: input.paymentReference,
+          amount: subtotal,
+          transactionNumber: txnNumber,
+        },
+      });
+    }
 
     await client.query('COMMIT');
     return {

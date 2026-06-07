@@ -1,3 +1,9 @@
+import {
+  getOrCreateEntityCorrelationId,
+  newCorrelationId,
+  recordAuditEvent,
+  type AuditChange,
+} from './audit';
 import { getPool } from './db';
 
 export { CUSTOMER_TYPES, defaultPriceLevelNameForType } from './customers-shared';
@@ -5,6 +11,7 @@ export type { CustomerType } from './customers-shared';
 
 export type Customer = {
   id: string;
+  company_id?: string;
   code: string;
   name: string;
   customer_type: string;
@@ -107,6 +114,7 @@ export async function createCustomer(input: {
   email?: string;
   phone?: string;
   address?: string;
+  actorId?: string;
 }) {
   const pool = getPool();
   const code = input.code?.trim() || (await nextCustomerCode(input.companyId));
@@ -129,7 +137,24 @@ export async function createCustomer(input: {
       input.address ?? null,
     ]
   );
-  return rows[0];
+  const customer = rows[0];
+  await recordAuditEvent(pool, {
+    companyId: input.companyId,
+    entityType: 'customer',
+    entityId: customer.id as string,
+    action: 'customer.created',
+    actorId: input.actorId,
+    summary: `Customer ${code} — ${input.name}`,
+    recordLabel: code,
+    correlationId: newCorrelationId(),
+    source: 'api',
+    metadata: {
+      customerCode: code,
+      customerType: input.customerType ?? 'contractor',
+      phone: input.phone ?? null,
+    },
+  });
+  return customer;
 }
 
 export async function updateCustomer(
@@ -144,9 +169,13 @@ export async function updateCustomer(
     phone: string | null;
     address: string | null;
     isActive: boolean;
+    actorId?: string;
   }>
 ) {
   const pool = getPool();
+  const before = await getCustomer(id);
+  if (!before) return null;
+
   const sets: string[] = [];
   const values: unknown[] = [id];
   let i = 2;
@@ -166,14 +195,50 @@ export async function updateCustomer(
   if (input.address !== undefined) add('address', input.address);
   if (input.isActive !== undefined) add('is_active', input.isActive);
 
-  if (sets.length === 0) return getCustomer(id);
+  if (sets.length === 0) return before;
 
   sets.push('updated_at = now()');
   const { rows } = await pool.query(
     `UPDATE customers SET ${sets.join(', ')} WHERE id = $1::uuid RETURNING *`,
     values
   );
-  return rows[0] ?? null;
+  const after = rows[0];
+  if (!after) return null;
+
+  const changes: AuditChange[] = [];
+  const track = (field: string, oldVal: unknown, newVal: unknown) => {
+    if (input[field as keyof typeof input] === undefined) return;
+    if (String(oldVal ?? '') !== String(newVal ?? '')) {
+      changes.push({ field, old: oldVal, new: newVal });
+    }
+  };
+  track('name', before.name, after.name);
+  track('customerType', before.customer_type, after.customer_type);
+  track('priceLevelId', before.price_level_id, after.price_level_id);
+  track('creditLimit', before.credit_limit, after.credit_limit);
+  track('paymentTermsDays', before.payment_terms_days, after.payment_terms_days);
+  track('email', before.email, after.email);
+  track('phone', before.phone, after.phone);
+  track('address', before.address, after.address);
+  track('isActive', before.is_active, after.is_active);
+
+  if (changes.length > 0) {
+    await recordAuditEvent(pool, {
+      companyId: before.company_id!,
+      entityType: 'customer',
+      entityId: id,
+      action: 'customer.updated',
+      actorId: input.actorId,
+      summary: `Customer ${before.code} updated`,
+      recordLabel: before.code,
+      correlationId: await getOrCreateEntityCorrelationId(pool, 'customer', id),
+      source: 'api',
+      changes,
+      metadata: { customerCode: before.code },
+    });
+  }
+
+  return after;
 }
 
 export async function getCustomerRecentSales(customerId: string, limit = 10) {

@@ -38,12 +38,15 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const body = await request.json();
 
+  const actorId = auth.user.id !== 'api-key' ? auth.user.id : undefined;
+
   if (body.type === 'category_default') {
     const row = await upsertCategoryDefault({
       categoryId: body.categoryId,
       locationType: body.locationType,
       defaultMinQty: Number(body.defaultMinQty),
       defaultReorderQty: Number(body.defaultReorderQty),
+      actorId,
     });
     return NextResponse.json({ default: row });
   }
@@ -54,6 +57,7 @@ export async function POST(request: Request) {
     minQty: Number(body.minQty),
     reorderQty: Number(body.reorderQty),
     leadTimeDays: body.leadTimeDays != null ? Number(body.leadTimeDays) : undefined,
+    actorId,
   });
   return NextResponse.json({ rule });
 }

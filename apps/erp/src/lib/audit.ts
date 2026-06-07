@@ -35,6 +35,22 @@ export function newCorrelationId(): string {
   return randomUUID();
 }
 
+export async function getOrCreateEntityCorrelationId(
+  db: Db,
+  entityType: AuditEntityType,
+  entityId: string
+): Promise<string> {
+  const { rows } = await db.query(
+    `SELECT correlation_id FROM audit_events
+     WHERE entity_type = $1::audit_entity_type AND entity_id = $2::uuid
+       AND correlation_id IS NOT NULL
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [entityType, entityId]
+  );
+  return (rows[0]?.correlation_id as string | undefined) ?? newCorrelationId();
+}
+
 function parseChanges(raw: unknown): AuditChange[] {
   if (!raw) return [];
   const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -147,13 +163,37 @@ function buildWhere(opts: ListOpts, values: unknown[]) {
     where += ` AND ae.action LIKE 'po.%'`;
   }
   if (opts.preset === 'reorder_only') {
-    where += ` AND (ae.entity_type IN ('purchase_suggestion', 'reorder_scan') OR ae.action LIKE 'suggestion.%' OR ae.action = 'reorder.scan_completed')`;
+    where += ` AND (
+      ae.entity_type IN ('purchase_suggestion', 'reorder_scan', 'reorder_rule')
+      OR ae.action LIKE 'suggestion.%'
+      OR ae.action LIKE 'reorder.%'
+    )`;
   }
   if (opts.preset === 'imports') {
-    where += ` AND (ae.entity_type = 'import_run' OR ae.action LIKE 'import.%')`;
+    where += ` AND (
+      ae.entity_type = 'import_run'
+      OR ae.action LIKE 'import.%'
+      OR ae.action IN ('price_list.imported', 'price_list.import_dry_run', 'reorder.rules_imported')
+    )`;
   }
   if (opts.preset === 'adjustments') {
     where += ` AND (ae.entity_type IN ('inventory_adjustment', 'stock_item') OR ae.action = 'adjustment.created')`;
+  }
+  if (opts.preset === 'sales') {
+    where += ` AND (ae.entity_type = 'sales_document' OR ae.action LIKE 'sales.%' OR (ae.action = 'payment.mock_completed' AND ae.metadata->>'targetType' = 'sales'))`;
+  }
+  if (opts.preset === 'customers') {
+    where += ` AND (ae.entity_type = 'customer' OR ae.action LIKE 'customer.%')`;
+  }
+  if (opts.preset === 'pricing') {
+    where += ` AND (ae.entity_type = 'price_list' OR ae.action LIKE 'price_list.%')`;
+  }
+  if (opts.preset === 'pos_sales') {
+    where += ` AND (
+      ae.entity_type IN ('pos_transaction', 'pos_session')
+      OR ae.action LIKE 'pos.%'
+      OR (ae.action = 'payment.mock_completed' AND ae.metadata->>'targetType' = 'pos')
+    )`;
   }
   if (opts.q?.trim()) {
     values.push(`%${opts.q.trim()}%`);
@@ -273,6 +313,20 @@ export async function getRecordAuditStory(
     return events.reverse();
   }
   const pool = getPool();
+  if (entityType === 'sales_document') {
+    const { rows } = await pool.query(
+      `SELECT ae.*, u.email AS actor_email
+       FROM audit_events ae
+       LEFT JOIN app_users u ON u.id = ae.actor_id
+       WHERE
+         (ae.entity_type = 'sales_document' AND ae.entity_id = $1::uuid)
+         OR (ae.action = 'payment.mock_completed' AND ae.metadata->>'targetId' = $1::text)
+       ORDER BY ae.created_at ASC
+       LIMIT $2`,
+      [entityId, limit]
+    );
+    return rows.map((row) => parseAuditRow(row));
+  }
   const { rows } = await pool.query(
     `SELECT ae.*, u.email AS actor_email
      FROM audit_events ae
@@ -318,6 +372,8 @@ export async function getAuditKpis(companyId: string) {
        COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)::int AS events_today,
        COUNT(*) FILTER (WHERE action = 'po.created' AND created_at >= CURRENT_DATE)::int AS pos_today,
        COUNT(*) FILTER (WHERE action = 'import.completed' AND created_at >= CURRENT_DATE)::int AS imports_today,
+       COUNT(*) FILTER (WHERE action = 'sales.created' AND created_at >= CURRENT_DATE)::int AS sales_today,
+       COUNT(*) FILTER (WHERE action = 'pos.sale_completed' AND created_at >= CURRENT_DATE)::int AS pos_sales_today,
        (
          SELECT u.email FROM audit_events ae2
          JOIN app_users u ON u.id = ae2.actor_id
@@ -332,6 +388,8 @@ export async function getAuditKpis(companyId: string) {
     events_today: number;
     pos_today: number;
     imports_today: number;
+    sales_today: number;
+    pos_sales_today: number;
     top_actor_7d: string | null;
   };
 }

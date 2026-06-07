@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { RecordActivityPanel } from '@/components/audit/RecordActivityPanel';
 import { CustomerEditPanel } from '@/components/customers/CustomerEditPanel';
-import { hasPermission } from '@/lib/auth/permissions';
+import { getRecordAuditStory } from '@/lib/audit';
+import { hasPermission, isAdminRole } from '@/lib/auth/permissions';
 import { getSessionFromCookies } from '@/lib/auth/session';
 import { formatLkr } from '@/lib/format';
 import {
@@ -31,11 +33,13 @@ export default async function CustomerDetailPage({
   const { id } = await params;
   const session = await getSessionFromCookies();
   const canWrite = session ? hasPermission(session.role, 'customers:write') : false;
+  const isAdmin = session ? isAdminRole(session.role) : false;
 
-  const [customer, recentSales, summary] = await Promise.all([
+  const [customer, recentSales, summary, auditEvents] = await Promise.all([
     getCustomer(id),
     getCustomerRecentSales(id, 10),
     getCustomerSalesSummary(id),
+    isAdmin ? getRecordAuditStory('customer', id) : Promise.resolve([]),
   ]);
   if (!customer) notFound();
 
@@ -178,6 +182,14 @@ export default async function CustomerDetailPage({
           </div>
         )}
       </section>
+
+      {isAdmin && auditEvents.length > 0 && (
+        <RecordActivityPanel
+          recordLabel={customer.code}
+          subtitle="Customer create and update history"
+          events={auditEvents}
+        />
+      )}
     </div>
   );
 }

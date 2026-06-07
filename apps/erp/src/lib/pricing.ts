@@ -1,3 +1,4 @@
+import { newCorrelationId, recordAuditEvent } from './audit';
 import { getPool } from './db';
 import { netPrice as calcNetPrice } from './pricing-shared';
 
@@ -14,6 +15,7 @@ export type PriceListSummary = {
 };
 
 export type PriceListDetail = PriceListSummary & {
+  company_id: string;
   scope_category_id: string | null;
   scope_group_id: string | null;
   created_at: string;
@@ -106,6 +108,7 @@ export async function getPriceList(id: string): Promise<PriceListDetail | null> 
      )
      SELECT
        pl.id,
+       pl.company_id,
        pl.price_level_id,
        pvl.name AS price_level_name,
        pl.scope_type,
@@ -125,9 +128,9 @@ export async function getPriceList(id: string): Promise<PriceListDetail | null> 
      LEFT JOIN price_list_items pli ON pli.price_list_id = pl.id
      LEFT JOIN current_lists cl ON cl.id = pl.id
      WHERE pl.id = $1::uuid
-     GROUP BY pl.id, pl.price_level_id, pvl.name, pl.scope_type, pl.scope_category_id,
-              pl.scope_group_id, cat.name, sg.name, pl.applicable_from, pl.created_at,
-              pl.updated_at, cl.rn`,
+     GROUP BY pl.id, pl.company_id, pl.price_level_id, pvl.name, pl.scope_type,
+              pl.scope_category_id, pl.scope_group_id, cat.name, sg.name,
+              pl.applicable_from, pl.created_at, pl.updated_at, cl.rn`,
     [id]
   );
   return (rows[0] as PriceListDetail) ?? null;
@@ -186,6 +189,83 @@ export async function getPriceListItems(priceListId: string) {
   return items;
 }
 
+export type PriceListExportRow = {
+  primary_sku: string | null;
+  item_name: string;
+  from_qty: string;
+  less_than_qty: string | null;
+  rate: string;
+  discount_pct: string;
+};
+
+export async function exportPriceListItems(priceListId: string): Promise<{
+  rows: PriceListExportRow[];
+  meta: { companyId: string; priceLevelName: string; scopeLabel: string };
+}> {
+  const pool = getPool();
+  const priceList = await getPriceList(priceListId);
+  if (!priceList) {
+    throw new Error('Price list not found');
+  }
+  const { rows } = await pool.query(
+    `SELECT
+       a.alias AS primary_sku,
+       si.name AS item_name,
+       plt.from_qty,
+       plt.less_than_qty,
+       plt.rate,
+       plt.discount_pct
+     FROM price_list_items pli
+     JOIN stock_items si ON si.id = pli.stock_item_id
+     JOIN price_list_tiers plt ON plt.price_list_item_id = pli.id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases
+       WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE pli.price_list_id = $1::uuid
+     ORDER BY si.name, plt.from_qty`,
+    [priceListId]
+  );
+  const scopeLabel =
+    priceList.category_name ?? priceList.group_name ?? priceList.scope_type;
+  return {
+    rows: rows as PriceListExportRow[],
+    meta: {
+      companyId: priceList.company_id,
+      priceLevelName: priceList.price_level_name,
+      scopeLabel,
+    },
+  };
+}
+
+export async function recordPriceListExportAudit(input: {
+  priceListId: string;
+  actorId?: string | null;
+  rowCount: number;
+}) {
+  const pool = getPool();
+  const priceList = await getPriceList(input.priceListId);
+  if (!priceList) return;
+  const scopeLabel =
+    priceList.category_name ?? priceList.group_name ?? priceList.scope_type;
+  await recordAuditEvent(pool, {
+    companyId: priceList.company_id,
+    entityType: 'price_list',
+    entityId: input.priceListId,
+    action: 'price_list.exported',
+    actorId: input.actorId,
+    summary: `Exported ${input.rowCount} tier(s) — ${priceList.price_level_name} / ${scopeLabel}`,
+    recordLabel: `${priceList.price_level_name} / ${scopeLabel}`,
+    correlationId: newCorrelationId(),
+    source: 'api',
+    metadata: {
+      rowCount: input.rowCount,
+      priceLevelName: priceList.price_level_name,
+      scopeLabel,
+    },
+  });
+}
+
 export async function resolveItemPrice(
   stockItemId: string,
   priceLevelId: string,
@@ -216,6 +296,7 @@ export async function upsertPriceListItem(input: {
   lessThanQty?: number | null;
   rate: number;
   discountPct?: number;
+  actorId?: string;
 }) {
   const pool = getPool();
   const client = await pool.connect();
@@ -248,6 +329,43 @@ export async function upsertPriceListItem(input: {
       `UPDATE price_lists SET updated_at = now() WHERE id = $1`,
       [input.priceListId]
     );
+
+    const { rows: meta } = await client.query(
+      `SELECT pl.company_id, pl.id, pvl.name AS price_level_name,
+              sia.alias AS sku, si.name AS item_name
+       FROM price_lists pl
+       JOIN price_levels pvl ON pvl.id = pl.price_level_id
+       JOIN stock_items si ON si.id = $2::uuid
+       LEFT JOIN LATERAL (
+         SELECT alias FROM stock_item_aliases
+         WHERE item_id = si.id AND is_primary = true LIMIT 1
+       ) sia ON true
+       WHERE pl.id = $1::uuid`,
+      [input.priceListId, input.stockItemId]
+    );
+    const m = meta[0];
+    if (m) {
+      await recordAuditEvent(client, {
+        companyId: m.company_id as string,
+        entityType: 'price_list',
+        entityId: input.priceListId,
+        action: 'price_list.item_upserted',
+        actorId: input.actorId,
+        summary: `${m.price_level_name} — ${m.sku ?? 'item'} @ ${input.rate}`,
+        recordLabel: (m.sku as string) ?? undefined,
+        correlationId: newCorrelationId(),
+        source: 'api',
+        metadata: {
+          sku: m.sku,
+          itemName: m.item_name,
+          fromQty: input.fromQty,
+          rate: input.rate,
+          discountPct: input.discountPct ?? 0,
+          priceLevelName: m.price_level_name,
+        },
+      });
+    }
+
     await client.query('COMMIT');
     return { ok: true as const };
   } catch (e) {

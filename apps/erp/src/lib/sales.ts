@@ -1,4 +1,9 @@
 import type { PoolClient } from 'pg';
+import {
+  getOrCreateEntityCorrelationId,
+  newCorrelationId,
+  recordAuditEvent,
+} from './audit';
 import { getPool } from './db';
 import { resolveItemPrice } from './pricing';
 import { recordStockMovement } from './stock-movements';
@@ -168,6 +173,7 @@ export async function createSalesDocument(input: {
     discountPct?: number;
     isSpecialOrder?: boolean;
   }>;
+  correlationId?: string;
 }) {
   const pool = getPool();
   const client = await pool.connect();
@@ -274,8 +280,29 @@ export async function createSalesDocument(input: {
       [doc.id, subtotal, tax, total]
     );
 
+    const correlationId = input.correlationId ?? newCorrelationId();
+    await recordAuditEvent(client, {
+      companyId: input.companyId,
+      entityType: 'sales_document',
+      entityId: doc.id as string,
+      action: 'sales.created',
+      actorId: input.createdBy,
+      summary: `${input.docKind === 'quote' ? 'Quote' : 'Order'} ${docNumber} — ${input.lines.length} line(s)`,
+      recordLabel: docNumber,
+      correlationId,
+      source: 'api',
+      metadata: {
+        docNumber,
+        docKind: input.docKind,
+        customerId: input.customerId ?? null,
+        fulfillmentType: input.fulfillmentType ?? 'pickup',
+        lineCount: input.lines.length,
+        total,
+      },
+    });
+
     await client.query('COMMIT');
-    return { id: doc.id as string, docNumber };
+    return { id: doc.id as string, docNumber, correlationId };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
@@ -294,6 +321,16 @@ export async function updateSalesStatus(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const { rows: prevRows } = await client.query(
+      `SELECT * FROM sales_documents WHERE id = $1::uuid`,
+      [id]
+    );
+    if (prevRows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const prev = prevRows[0];
+
     const { rows } = await client.query(
       `UPDATE sales_documents SET
          status = $2::sales_doc_status,
@@ -303,11 +340,53 @@ export async function updateSalesStatus(
        WHERE id = $1 RETURNING *`,
       [id, status, payment?.method ?? null, payment?.reference ?? null]
     );
-    if (rows.length === 0) {
-      await client.query('ROLLBACK');
-      return null;
-    }
     const doc = rows[0];
+    const correlationId = await getOrCreateEntityCorrelationId(
+      client,
+      'sales_document',
+      id
+    );
+
+    if (prev.status !== status) {
+      await recordAuditEvent(client, {
+        companyId: doc.company_id as string,
+        entityType: 'sales_document',
+        entityId: id,
+        action: 'sales.status_changed',
+        actorId: userId,
+        summary: `${doc.doc_number} → ${status}`,
+        recordLabel: doc.doc_number as string,
+        correlationId,
+        source: 'api',
+        metadata: {
+          docNumber: doc.doc_number,
+          oldStatus: prev.status,
+          newStatus: status,
+          status,
+        },
+      });
+    }
+
+    if (payment?.reference) {
+      await recordAuditEvent(client, {
+        companyId: doc.company_id as string,
+        entityType: 'sales_document',
+        entityId: id,
+        action: 'payment.mock_completed',
+        actorId: userId,
+        summary: `Payment ${payment.method} — ${doc.doc_number}`,
+        recordLabel: doc.doc_number as string,
+        correlationId,
+        source: 'api',
+        metadata: {
+          targetType: 'sales',
+          targetId: id,
+          method: payment.method,
+          paymentReference: payment.reference,
+          docNumber: doc.doc_number,
+        },
+      });
+    }
 
     if (status === 'collected' && doc.doc_kind === 'order') {
       await decrementStockForOrder(client, doc, userId);
@@ -392,16 +471,45 @@ async function latestSnapshotForLocation(client: PoolClient, locationId: string)
 export async function updatePickProgress(
   documentId: string,
   lineId: string,
-  pickedQty: number
+  pickedQty: number,
+  actorId?: string
 ) {
   const pool = getPool();
+  const { rows: docRows } = await pool.query(
+    `SELECT company_id, doc_number FROM sales_documents WHERE id = $1::uuid`,
+    [documentId]
+  );
   const { rows } = await pool.query(
     `UPDATE sales_document_lines SET picked_qty = $3
      WHERE id = $2 AND document_id = $1
      RETURNING *`,
     [documentId, lineId, pickedQty]
   );
-  return rows[0] ?? null;
+  const line = rows[0];
+  if (line && docRows[0]) {
+    const correlationId = await getOrCreateEntityCorrelationId(
+      pool,
+      'sales_document',
+      documentId
+    );
+    await recordAuditEvent(pool, {
+      companyId: docRows[0].company_id as string,
+      entityType: 'sales_document',
+      entityId: documentId,
+      action: 'sales.pick_progress',
+      actorId,
+      summary: `${docRows[0].doc_number} — picked qty ${pickedQty}`,
+      recordLabel: docRows[0].doc_number as string,
+      correlationId,
+      source: 'api',
+      metadata: {
+        docNumber: docRows[0].doc_number,
+        lineId,
+        pickedQty,
+      },
+    });
+  }
+  return line ?? null;
 }
 
 export async function listFulfillmentLocations() {
@@ -421,6 +529,13 @@ export async function convertQuoteToOrder(quoteId: string, createdBy?: string) {
     return { ok: false as const, error: 'Quote not found' };
   }
 
+  const pool = getPool();
+  const correlationId = await getOrCreateEntityCorrelationId(
+    pool,
+    'sales_document',
+    quoteId
+  );
+
   const result = await createSalesDocument({
     companyId: quote.document.company_id,
     docKind: 'order',
@@ -430,6 +545,7 @@ export async function convertQuoteToOrder(quoteId: string, createdBy?: string) {
     locationId: quote.document.location_id ?? undefined,
     notes: quote.document.notes ?? undefined,
     createdBy,
+    correlationId,
     lines: quote.lines.map((l) => ({
       stockItemId: l.stock_item_id,
       quantity: Number(l.quantity),
@@ -439,7 +555,24 @@ export async function convertQuoteToOrder(quoteId: string, createdBy?: string) {
     })),
   });
 
-  const pool = getPool();
+  await recordAuditEvent(pool, {
+    companyId: quote.document.company_id,
+    entityType: 'sales_document',
+    entityId: quoteId,
+    action: 'sales.quote_converted',
+    actorId: createdBy,
+    summary: `${quote.document.doc_number} → ${result.docNumber}`,
+    recordLabel: quote.document.doc_number,
+    correlationId,
+    source: 'api',
+    metadata: {
+      quoteId,
+      orderId: result.id,
+      quoteNumber: quote.document.doc_number,
+      orderNumber: result.docNumber,
+    },
+  });
+
   await pool.query(
     `UPDATE sales_documents SET source_quote_id = $2 WHERE id = $1`,
     [result.id, quoteId]

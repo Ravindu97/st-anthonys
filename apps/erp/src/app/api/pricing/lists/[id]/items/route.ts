@@ -29,6 +29,7 @@ export async function POST(
     lessThanQty: body.lessThanQty ?? null,
     rate: Number(body.rate),
     discountPct: body.discountPct ?? 0,
+    actorId: auth.user.id !== 'api-key' ? auth.user.id : undefined,
   });
 
   return NextResponse.json({ ok: true });

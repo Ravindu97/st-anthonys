@@ -2,14 +2,18 @@ type Kpis = {
   events_today: number;
   pos_today: number;
   imports_today: number;
+  sales_today: number;
+  pos_sales_today: number;
   top_actor_7d: string | null;
 };
 
 export function AuditKpiStrip({ kpis }: { kpis: Kpis }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <Kpi label="Events today" value={String(kpis.events_today)} />
       <Kpi label="POs created today" value={String(kpis.pos_today)} />
+      <Kpi label="Sales docs today" value={String(kpis.sales_today)} />
+      <Kpi label="POS sales today" value={String(kpis.pos_sales_today)} />
       <Kpi label="Imports today" value={String(kpis.imports_today)} />
       <Kpi label="Top actor (7d)" value={kpis.top_actor_7d ?? '—'} small />
     </div>

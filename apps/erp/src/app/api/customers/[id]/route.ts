@@ -34,6 +34,7 @@ export async function PATCH(
     phone: body.phone,
     address: body.address,
     isActive: body.isActive,
+    actorId: auth.user.id !== 'api-key' ? auth.user.id : undefined,
   });
   if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({ customer });

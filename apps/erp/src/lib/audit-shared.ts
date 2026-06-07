@@ -8,7 +8,12 @@ export type AuditEntityType =
   | 'import_run'
   | 'inventory_adjustment'
   | 'stock_item'
-  | 'pos_transaction';
+  | 'pos_transaction'
+  | 'pos_session'
+  | 'customer'
+  | 'sales_document'
+  | 'price_list'
+  | 'reorder_rule';
 
 export type AuditSource = 'web' | 'api' | 'system';
 
@@ -51,7 +56,11 @@ export type AuditPreset =
   | 'po_actions'
   | 'reorder_only'
   | 'imports'
-  | 'adjustments';
+  | 'adjustments'
+  | 'sales'
+  | 'customers'
+  | 'pricing'
+  | 'pos_sales';
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'po.created': 'PO created',
@@ -73,6 +82,22 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'import.dry_run': 'Import preview',
   'adjustment.created': 'Balance adjusted',
   'pos.sale_completed': 'POS sale completed',
+  'pos.session_opened': 'POS session opened',
+  'pos.session_closed': 'POS session closed',
+  'reorder.rule_upserted': 'Reorder rule saved',
+  'reorder.rules_imported': 'Reorder rules imported',
+  'reorder.category_default_upserted': 'Category default saved',
+  'price_list.exported': 'Price list exported',
+  'customer.created': 'Customer created',
+  'customer.updated': 'Customer updated',
+  'price_list.imported': 'Price list imported',
+  'price_list.import_dry_run': 'Price list preview',
+  'price_list.item_upserted': 'Price updated',
+  'sales.created': 'Sales doc created',
+  'sales.status_changed': 'Status changed',
+  'sales.pick_progress': 'Pick progress',
+  'sales.quote_converted': 'Quote converted',
+  'payment.mock_completed': 'Payment completed',
 };
 
 export const AUDIT_PRESETS: { id: AuditPreset; label: string }[] = [
@@ -81,14 +106,38 @@ export const AUDIT_PRESETS: { id: AuditPreset; label: string }[] = [
   { id: 'reorder_only', label: 'Reorder only' },
   { id: 'imports', label: 'Imports' },
   { id: 'adjustments', label: 'Adjustments' },
+  { id: 'sales', label: 'Sales' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'pricing', label: 'Pricing' },
+  { id: 'pos_sales', label: 'POS sales' },
 ];
 
-function extractPoNumber(event: AuditEvent): string | null {
-  if (event.record_label?.startsWith('PO-')) return event.record_label;
+const RECORD_LABEL_PATTERNS = [
+  /^PO-\d+/,
+  /^SO-\d+/,
+  /^QT-\d+/,
+  /^TXN-\d+/,
+  /^CUST-\d+/,
+  /^GRN-\d+/,
+];
+
+function extractRecordKey(event: AuditEvent): string | null {
+  if (event.record_label) {
+    for (const pat of RECORD_LABEL_PATTERNS) {
+      if (pat.test(event.record_label)) return event.record_label.match(pat)?.[0] ?? event.record_label;
+    }
+    if (event.record_label.startsWith('CUST-')) return event.record_label;
+  }
   const meta = event.metadata;
   if (typeof meta.poNumber === 'string') return meta.poNumber;
-  const match = event.summary.match(/PO-\d+/);
-  return match?.[0] ?? null;
+  if (typeof meta.docNumber === 'string') return meta.docNumber;
+  if (typeof meta.transactionNumber === 'string') return meta.transactionNumber;
+  if (typeof meta.customerCode === 'string') return meta.customerCode;
+  for (const pat of RECORD_LABEL_PATTERNS) {
+    const match = event.summary.match(pat);
+    if (match) return match[0];
+  }
+  return null;
 }
 
 function workflowTitle(events: AuditEvent[]): { title: string; subtitle: string } {
@@ -98,11 +147,39 @@ function workflowTitle(events: AuditEvent[]): { title: string; subtitle: string 
   const primary =
     sorted.find((e) => e.action === 'po.created') ??
     sorted.find((e) => e.action === 'po.bulk_created') ??
+    sorted.find((e) => e.action === 'sales.created') ??
+    sorted.find((e) => e.action === 'customer.created') ??
+    sorted.find((e) => e.action === 'price_list.imported') ??
     sorted.find((e) => e.action === 'import.completed') ??
     sorted.find((e) => e.action === 'grn.created') ??
+    sorted.find((e) => e.action === 'pos.session_opened') ??
+    sorted.find((e) => e.action === 'pos.sale_completed') ??
     sorted.find((e) => e.action === 'adjustment.created') ??
     sorted.find((e) => e.action === 'suggestion.bulk_approved') ??
     sorted[0];
+
+  const salesSteps: string[] = [];
+  if (events.some((e) => e.action === 'sales.created')) salesSteps.push('created');
+  if (events.some((e) => e.action === 'sales.quote_converted')) salesSteps.push('converted');
+  if (events.some((e) => e.action === 'sales.status_changed')) {
+    const statuses = events
+      .filter((e) => e.action === 'sales.status_changed')
+      .map((e) => String(e.metadata.status ?? e.metadata.newStatus ?? ''))
+      .filter(Boolean);
+    if (statuses.includes('confirmed')) salesSteps.push('confirmed');
+    if (statuses.includes('collected') || statuses.includes('delivered')) {
+      salesSteps.push('collected');
+    }
+  }
+  if (events.some((e) => e.action === 'sales.pick_progress')) salesSteps.push('picked');
+  if (events.some((e) => e.action === 'payment.mock_completed')) salesSteps.push('paid');
+
+  if (salesSteps.length > 1) {
+    return {
+      title: primary.record_label ?? primary.summary,
+      subtitle: [...new Set(salesSteps)].join(' → '),
+    };
+  }
 
   const counts = {
     approved: events.filter((e) => e.action === 'suggestion.approved').length,
@@ -117,6 +194,19 @@ function workflowTitle(events: AuditEvent[]): { title: string; subtitle: string 
   if (events.some((e) => e.action === 'reorder.scan_completed')) {
     parts.push('reorder scan');
   }
+  if (events.some((e) => e.action === 'suggestion.auto_created')) {
+    const n = events.filter((e) => e.action === 'suggestion.auto_created').length;
+    parts.push(`${n} auto-created`);
+  }
+  if (events.some((e) => e.action === 'reorder.rules_imported')) {
+    parts.push('rules import');
+  }
+  if (events.some((e) => e.action === 'price_list.item_upserted')) {
+    parts.push('price edits');
+  }
+  if (events.some((e) => e.action === 'customer.updated')) {
+    parts.push('updated');
+  }
 
   const subtitle =
     parts.length > 0
@@ -130,6 +220,16 @@ function workflowTitle(events: AuditEvent[]): { title: string; subtitle: string 
 }
 
 export function resolveAuditRecordHref(event: AuditEvent): string | null {
+  if (event.action === 'payment.mock_completed') {
+    const targetType = event.metadata.targetType;
+    const targetId = event.metadata.targetId;
+    if (targetType === 'pos' && typeof targetId === 'string') {
+      return `/orders/pos/${targetId}`;
+    }
+    if (targetType === 'sales' && typeof targetId === 'string') {
+      return `/orders/${targetId}`;
+    }
+  }
   if (event.entity_type === 'purchase_order') {
     return `/purchasing/${event.entity_id}`;
   }
@@ -139,6 +239,15 @@ export function resolveAuditRecordHref(event: AuditEvent): string | null {
   }
   if (event.entity_type === 'import_run') {
     return '/import';
+  }
+  if (event.entity_type === 'customer') {
+    return `/customers/${event.entity_id}`;
+  }
+  if (event.entity_type === 'sales_document') {
+    return `/orders/${event.entity_id}`;
+  }
+  if (event.entity_type === 'price_list') {
+    return `/pricing/${event.entity_id}`;
   }
   const vendorSlug = event.metadata.vendorSlug;
   const primarySku = event.metadata.primarySku;
@@ -151,7 +260,35 @@ export function resolveAuditRecordHref(event: AuditEvent): string | null {
   if (event.entity_type === 'pos_transaction') {
     return `/orders/pos/${event.entity_id}`;
   }
+  if (event.entity_type === 'pos_session') {
+    return '/pos';
+  }
+  if (event.entity_type === 'reorder_rule') {
+    return '/inventory/reorder?tab=rules';
+  }
   return null;
+}
+
+function bestPrimaryHref(events: AuditEvent[]): string | null {
+  const priority = [
+    'sales_document',
+    'customer',
+    'price_list',
+    'purchase_order',
+    'pos_transaction',
+    'pos_session',
+    'goods_receipt',
+    'import_run',
+  ] as const;
+  const sorted = [...events].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  for (const type of priority) {
+    const match = sorted.find((e) => e.entity_type === type);
+    const href = match ? resolveAuditRecordHref(match) : null;
+    if (href) return href;
+  }
+  return resolveAuditRecordHref(sorted[0]);
 }
 
 export function groupEventsIntoWorkflows(events: AuditEvent[]): AuditWorkflow[] {
@@ -180,7 +317,7 @@ export function groupEventsIntoWorkflows(events: AuditEvent[]): AuditWorkflow[] 
       actor_email: sorted.find((e) => e.actor_email)?.actor_email ?? null,
       started_at: sorted[sorted.length - 1]?.created_at ?? sorted[0].created_at,
       event_count: evts.length,
-      primary_href: resolveAuditRecordHref(sorted[0]),
+      primary_href: bestPrimaryHref(sorted),
       events: sorted,
     });
   }
@@ -188,14 +325,14 @@ export function groupEventsIntoWorkflows(events: AuditEvent[]): AuditWorkflow[] 
   const remaining = events.filter((e) => !used.has(e.id));
   for (const e of remaining) {
     if (used.has(e.id)) continue;
-    const poNumber = extractPoNumber(e);
+    const recordKey = extractRecordKey(e);
     const cluster = [e];
     used.add(e.id);
 
-    if (poNumber) {
+    if (recordKey) {
       for (const other of remaining) {
         if (used.has(other.id)) continue;
-        if (extractPoNumber(other) !== poNumber) continue;
+        if (extractRecordKey(other) !== recordKey) continue;
         const delta = Math.abs(
           new Date(e.created_at).getTime() - new Date(other.created_at).getTime()
         );
@@ -217,7 +354,7 @@ export function groupEventsIntoWorkflows(events: AuditEvent[]): AuditWorkflow[] 
       actor_email: sorted.find((ev) => ev.actor_email)?.actor_email ?? null,
       started_at: sorted[sorted.length - 1]?.created_at ?? sorted[0].created_at,
       event_count: cluster.length,
-      primary_href: resolveAuditRecordHref(sorted[0]),
+      primary_href: bestPrimaryHref(sorted),
       events: sorted,
     });
   }

@@ -42,7 +42,13 @@ export async function PATCH(
     const doc = await updateSalesStatus(
       id,
       body.status,
-      auth.user.id !== 'api-key' ? auth.user.id : undefined
+      auth.user.id !== 'api-key' ? auth.user.id : undefined,
+      body.paymentMethod && body.paymentReference
+        ? {
+            method: body.paymentMethod as 'cash' | 'card' | 'account',
+            reference: String(body.paymentReference),
+          }
+        : undefined
     );
     return NextResponse.json({ document: doc });
   }

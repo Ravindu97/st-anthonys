@@ -1,8 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { RecordActivityPanel } from '@/components/audit/RecordActivityPanel';
 import { CollectPaymentPanel } from '@/components/sales/CollectPaymentPanel';
 import { OrderActions } from '@/components/sales/OrderActions';
+import { getRecordAuditStory } from '@/lib/audit';
+import { isAdminRole } from '@/lib/auth/permissions';
+import { getSessionFromCookies } from '@/lib/auth/session';
 import { getSalesDocument } from '@/lib/sales';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +17,12 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getSalesDocument(id);
+  const session = await getSessionFromCookies();
+  const isAdmin = session ? isAdminRole(session.role) : false;
+  const [data, auditEvents] = await Promise.all([
+    getSalesDocument(id),
+    isAdmin ? getRecordAuditStory('sales_document', id) : Promise.resolve([]),
+  ]);
   if (!data) notFound();
   const { document: doc, lines } = data;
 
@@ -132,6 +141,14 @@ export default async function OrderDetailPage({
         >
           Open pick list
         </Link>
+      )}
+
+      {isAdmin && auditEvents.length > 0 && (
+        <RecordActivityPanel
+          recordLabel={doc.doc_number}
+          subtitle="Quote/order workflow and payments"
+          events={auditEvents}
+        />
       )}
     </div>
   );
