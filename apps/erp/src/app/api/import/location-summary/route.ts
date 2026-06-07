@@ -7,7 +7,9 @@ import {
 } from '@st-anthonys/import';
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { newCorrelationId, recordAuditEvent } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth';
+import { getDefaultCompanyId } from '@/lib/company';
 import { syncPurchaseSuggestions } from '@/lib/reorder';
 
 export const dynamic = 'force-dynamic';
@@ -72,17 +74,64 @@ export async function POST(request: Request) {
         dryRun,
       });
       await client.query('COMMIT');
+
+      const actorId = auth.user.id !== 'api-key' ? auth.user.id : null;
+      const correlationId = newCorrelationId();
       let reorderScan = null;
-      if (result.companyId) {
-        reorderScan = await syncPurchaseSuggestions(result.companyId);
+      if (result.companyId && result.importRunId) {
+        await recordAuditEvent(pool, {
+          companyId: result.companyId,
+          entityType: 'import_run',
+          entityId: result.importRunId,
+          action: 'import.completed',
+          actorId,
+          summary: `Imported ${categoryCode} location summary (${fileName})`,
+          recordLabel: `${categoryCode} import`,
+          correlationId,
+          source: 'api',
+          metadata: {
+            categoryCode,
+            fileName,
+            fileHash,
+            rowCounts: result.rowCounts ?? null,
+            snapshotId: result.snapshotId ?? null,
+          },
+        });
+        reorderScan = await syncPurchaseSuggestions(result.companyId, {
+          correlationId,
+          source: 'system',
+        });
       }
       return NextResponse.json({ ...result, dryRun: false, reorderScan });
     } catch (err) {
       if (isDryRunComplete(err)) {
         await client.query('ROLLBACK');
+        const preview = getDryRunResult(err);
+        let companyId = preview?.companyId;
+        if (!companyId) {
+          try {
+            companyId = await getDefaultCompanyId();
+          } catch {
+            companyId = undefined;
+          }
+        }
+        if (companyId) {
+          const pool2 = getPool();
+          await recordAuditEvent(pool2, {
+            companyId,
+            entityType: 'import_run',
+            entityId: newCorrelationId(),
+            action: 'import.dry_run',
+            actorId: auth.user.id !== 'api-key' ? auth.user.id : null,
+            summary: `Preview import ${categoryCode} (${fileName}) — no changes saved`,
+            recordLabel: `${categoryCode} preview`,
+            source: 'api',
+            metadata: { categoryCode, fileName, fileHash, dryRun: true, rowCounts: preview?.rowCounts },
+          });
+        }
         return NextResponse.json({
           dryRun: true,
-          preview: getDryRunResult(err),
+          preview,
         });
       }
       await client.query('ROLLBACK');

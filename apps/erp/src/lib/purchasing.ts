@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { newCorrelationId, recordAuditEvent, type AuditSource } from './audit';
 import { getPool } from './db';
 import { recordStockMovement } from './stock-movements';
 
@@ -21,6 +22,7 @@ export type PurchaseOrder = {
   total_amount: string;
   expected_date: string | null;
   created_at: Date;
+  created_by_email: string | null;
   line_count: number;
 };
 
@@ -100,13 +102,15 @@ export async function listPurchaseOrders(opts?: {
     `SELECT
        po.*,
        s.name AS supplier_name,
+       u.email AS created_by_email,
        COUNT(pol.id)::int AS line_count,
        COUNT(*) OVER()::int AS total_count
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
+     LEFT JOIN app_users u ON u.id = po.created_by
      LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
      ${where}
-     GROUP BY po.id, s.name
+     GROUP BY po.id, s.name, u.email
      ORDER BY po.created_at DESC
      LIMIT $${values.length - 1} OFFSET $${values.length}`,
     values
@@ -233,6 +237,8 @@ export async function createPurchaseOrderFromSuggestions(input: {
   supplierId: string;
   locationId?: string;
   createdBy?: string;
+  correlationId?: string;
+  source?: AuditSource;
 }) {
   const pool = getPool();
   const client = await pool.connect();
@@ -308,6 +314,43 @@ export async function createPurchaseOrderFromSuggestions(input: {
       [input.suggestionIds]
     );
 
+    const correlationId = input.correlationId ?? newCorrelationId();
+
+    await recordAuditEvent(client, {
+      companyId: input.companyId,
+      entityType: 'purchase_order',
+      entityId: po[0].id,
+      action: 'po.created',
+      actorId: input.createdBy,
+      summary: `Purchase order ${poNumber} created with ${lineRows.length} line(s)`,
+      recordLabel: poNumber,
+      correlationId,
+      source: input.source ?? 'api',
+      metadata: {
+        poNumber,
+        purchaseOrderId: po[0].id,
+        lineCount: lineRows.length,
+        suggestionIds: input.suggestionIds,
+        supplierId: input.supplierId,
+        totalAmount: subtotal,
+      },
+    });
+
+    for (const suggestionId of input.suggestionIds) {
+      await recordAuditEvent(client, {
+        companyId: input.companyId,
+        entityType: 'purchase_suggestion',
+        entityId: suggestionId,
+        action: 'suggestion.converted',
+        actorId: input.createdBy,
+        summary: `Converted to ${poNumber}`,
+        recordLabel: poNumber,
+        correlationId,
+        source: input.source ?? 'api',
+        metadata: { purchaseOrderId: po[0].id, poNumber },
+      });
+    }
+
     await client.query('COMMIT');
     return {
       ok: true as const,
@@ -346,15 +389,19 @@ export async function createBulkPurchaseOrdersByVendor(input: {
     lineCount: number;
   }> = [];
   const errors: string[] = [];
+  const bulkCorrelationId = newCorrelationId();
 
   for (const batch of input.batches) {
     if (batch.suggestionIds.length === 0) continue;
+    const poCorrelationId = newCorrelationId();
     const result = await createPurchaseOrderFromSuggestions({
       companyId: input.companyId,
       suggestionIds: batch.suggestionIds,
       supplierId: batch.supplierId,
       locationId: batch.locationId,
       createdBy: input.createdBy,
+      correlationId: poCorrelationId,
+      source: 'api',
     });
     if (!result.ok) {
       errors.push(`${batch.vendorName}: ${result.error}`);
@@ -382,6 +429,29 @@ export async function createBulkPurchaseOrdersByVendor(input: {
       error: errors.join('; ') || 'No purchase orders created',
     };
   }
+
+  const pool = getPool();
+  await recordAuditEvent(pool, {
+    companyId: input.companyId,
+    entityType: 'purchase_order',
+    entityId: results[0].id,
+    action: 'po.bulk_created',
+    actorId: input.createdBy,
+    summary: `Bulk PO run created ${results.length} purchase order(s)`,
+    recordLabel: `Bulk PO ×${results.length}`,
+    correlationId: bulkCorrelationId,
+    source: 'api',
+    metadata: {
+      orderCount: results.length,
+      orders: results.map((o) => ({
+        id: o.id,
+        poNumber: o.poNumber,
+        vendorCode: o.vendorCode,
+        lineCount: o.lineCount,
+      })),
+      errors,
+    },
+  });
 
   return { ok: true as const, orders: results, errors };
 }
@@ -447,6 +517,41 @@ export async function createPurchaseOrderFromSuggestion(input: {
       `UPDATE purchase_suggestions SET status = 'converted', updated_at = now() WHERE id = $1`,
       [input.suggestionId]
     );
+
+    const correlationId = newCorrelationId();
+
+    await recordAuditEvent(client, {
+      companyId: input.companyId,
+      entityType: 'purchase_order',
+      entityId: po[0].id,
+      action: 'po.created',
+      actorId: input.createdBy,
+      summary: `Purchase order ${poNumber} created from reorder suggestion`,
+      recordLabel: poNumber,
+      correlationId,
+      source: 'api',
+      metadata: {
+        poNumber,
+        purchaseOrderId: po[0].id,
+        lineCount: 1,
+        suggestionId: input.suggestionId,
+        supplierId: input.supplierId,
+        totalAmount: lineTotal,
+      },
+    });
+
+    await recordAuditEvent(client, {
+      companyId: input.companyId,
+      entityType: 'purchase_suggestion',
+      entityId: input.suggestionId,
+      action: 'suggestion.converted',
+      actorId: input.createdBy,
+      summary: `Converted to ${poNumber}`,
+      recordLabel: poNumber,
+      correlationId,
+      source: 'api',
+      metadata: { purchaseOrderId: po[0].id, poNumber },
+    });
 
     await client.query('COMMIT');
     return { ok: true as const, id: po[0].id as string, poNumber };
@@ -573,10 +678,49 @@ export async function receiveGoods(input: {
     }
 
     const newStatus = allReceived ? 'received' : 'partial';
+    const prevStatus = order.status as string;
     await client.query(
       `UPDATE purchase_orders SET status = $2::po_status, updated_at = now() WHERE id = $1`,
       [input.purchaseOrderId, newStatus]
     );
+
+    const receivedLines = input.lines.filter((l) => l.quantity > 0).length;
+    const grnCorrelationId = newCorrelationId();
+
+    await recordAuditEvent(client, {
+      companyId: input.companyId,
+      entityType: 'goods_receipt',
+      entityId: grn[0].id,
+      action: 'grn.created',
+      actorId: input.createdBy,
+      summary: `Goods receipt ${grnNumber} recorded for ${order.po_number}`,
+      recordLabel: grnNumber,
+      correlationId: grnCorrelationId,
+      source: 'api',
+      metadata: {
+        grnNumber,
+        purchaseOrderId: input.purchaseOrderId,
+        poNumber: order.po_number,
+        lineCount: receivedLines,
+        newStatus,
+      },
+    });
+
+    if (prevStatus !== newStatus) {
+      await recordAuditEvent(client, {
+        companyId: input.companyId,
+        entityType: 'purchase_order',
+        entityId: input.purchaseOrderId,
+        action: 'po.status_changed',
+        actorId: input.createdBy,
+        summary: `${order.po_number} status changed from ${prevStatus} to ${newStatus}`,
+        recordLabel: order.po_number,
+        correlationId: grnCorrelationId,
+        source: 'api',
+        changes: [{ field: 'status', old: prevStatus, new: newStatus }],
+        metadata: { from: prevStatus, to: newStatus, grnNumber, purchaseOrderId: input.purchaseOrderId },
+      });
+    }
 
     await client.query('COMMIT');
     return { ok: true as const, grnNumber, grnId: grn[0].id as string };

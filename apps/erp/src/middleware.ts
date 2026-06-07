@@ -17,7 +17,10 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function isAdminOnlyPath(pathname: string): boolean {
-  return pathname === '/import' || pathname.startsWith('/import/');
+  if (pathname === '/import' || pathname.startsWith('/import/')) return true;
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return true;
+  if (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) return true;
+  return false;
 }
 
 export async function middleware(request: NextRequest) {

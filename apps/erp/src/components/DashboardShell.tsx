@@ -86,6 +86,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         mobileOpen={mobileOpen}
         onCloseMobile={closeMobile}
         onToggleCollapse={toggleCollapsed}
+        userRole={user?.role}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

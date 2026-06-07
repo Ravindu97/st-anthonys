@@ -1,3 +1,4 @@
+import { newCorrelationId, recordAuditEvent, type AuditSource } from './audit';
 import { getPool } from './db';
 import { DEFAULT_REORDER_MIN } from './reorder-sql';
 
@@ -60,6 +61,8 @@ export type ReorderWorkbenchLine = {
   needs_rule: boolean;
   suggestion_id: string | null;
   suggestion_status: string | null;
+  approved_at: Date | null;
+  approved_by_email: string | null;
   snapshot_imported_at: Date | null;
   reorder_rule_id: string | null;
 };
@@ -360,6 +363,8 @@ export async function getReorderWorkbench(opts?: {
       b.needs_rule,
       ps.id AS suggestion_id,
       ps.status AS suggestion_status,
+      ps.approved_at,
+      approver.email AS approved_by_email,
       b.snapshot_imported_at,
       b.reorder_rule_id,
       ps.suggested_qty,
@@ -373,6 +378,7 @@ export async function getReorderWorkbench(opts?: {
       WHERE item_id = si.id AND is_primary = true LIMIT 1
     ) a ON true
     ${psJoin}
+    LEFT JOIN app_users approver ON approver.id = ps.approved_by
     WHERE 1=1 ${tabFilter} ${vendorFilter} ${searchFilter}
     ORDER BY
       b.category_name,
@@ -424,6 +430,8 @@ export async function getReorderWorkbench(opts?: {
       needs_rule: r.needs_rule,
       suggestion_id: r.suggestion_id,
       suggestion_status: r.suggestion_status,
+      approved_at: r.approved_at ?? null,
+      approved_by_email: r.approved_by_email ?? null,
       snapshot_imported_at: r.snapshot_imported_at,
       reorder_rule_id: r.reorder_rule_id,
     };
@@ -519,7 +527,10 @@ export async function getReorderCountsByVendor(companyId?: string) {
 }
 
 /** Scan main-location balances; create/update/cancel draft suggestions. */
-export async function syncPurchaseSuggestions(companyId?: string) {
+export async function syncPurchaseSuggestions(
+  companyId?: string,
+  opts?: { correlationId?: string; source?: AuditSource }
+) {
   const pool = getPool();
   const client = await pool.connect();
   try {
@@ -643,13 +654,35 @@ export async function syncPurchaseSuggestions(companyId?: string) {
       cancelled++;
     }
 
+    let scanRunId: string | null = null;
     if (companyId) {
-      await client.query(
+      const { rows: scanRows } = await client.query(
         `INSERT INTO reorder_scan_runs (
            company_id, items_below_min, suggestions_created, suggestions_updated, suggestions_cancelled
-         ) VALUES ($1, $2, $3, $4, $5)`,
+         ) VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
         [companyId, belowReorder.length, created, updated, cancelled]
       );
+      scanRunId = scanRows[0]?.id ?? null;
+      if (scanRunId) {
+        await recordAuditEvent(client, {
+          companyId,
+          entityType: 'reorder_scan',
+          entityId: scanRunId,
+          action: 'reorder.scan_completed',
+          actorId: null,
+          summary: `Reorder scan: ${created} created, ${updated} updated, ${cancelled} cancelled`,
+          recordLabel: 'Reorder scan',
+          correlationId: opts?.correlationId ?? null,
+          source: opts?.source ?? 'system',
+          metadata: {
+            itemsBelowMin: belowReorder.length,
+            created,
+            updated,
+            cancelled,
+          },
+        });
+      }
     }
 
     await client.query('COMMIT');
@@ -795,8 +828,21 @@ export async function listPurchaseSuggestions(opts?: {
   return { items, totalCount, page, pageSize };
 }
 
-export async function revertSuggestionToDraft(id: string) {
+export async function revertSuggestionToDraft(id: string, userId?: string) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT ps.*, si.name AS item_name, a.alias AS primary_sku, cat.code AS category_code
+     FROM purchase_suggestions ps
+     JOIN stock_items si ON si.id = ps.stock_item_id
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE ps.id = $1 AND ps.status = 'approved'`,
+    [id]
+  );
+  if (before.length === 0) return null;
+
   const { rows } = await pool.query(
     `UPDATE purchase_suggestions SET
        status = 'draft',
@@ -807,7 +853,27 @@ export async function revertSuggestionToDraft(id: string) {
      RETURNING *`,
     [id]
   );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (row) {
+    await recordAuditEvent(pool, {
+      companyId: row.company_id,
+      entityType: 'purchase_suggestion',
+      entityId: id,
+      action: 'suggestion.reverted',
+      actorId: userId,
+      summary: `Reverted ${before[0].primary_sku ?? before[0].item_name} to review queue`,
+      recordLabel: before[0].primary_sku ? `SKU ${before[0].primary_sku}` : null,
+      source: 'api',
+      changes: [{ field: 'status', old: 'approved', new: 'draft' }],
+      metadata: {
+        itemName: before[0].item_name,
+        primarySku: before[0].primary_sku,
+        vendorSlug: String(before[0].category_code ?? '').toLowerCase() || null,
+        previousApprovedBy: before[0].approved_by,
+      },
+    });
+  }
+  return row ?? null;
 }
 
 export async function updatePurchaseSuggestionStatus(
@@ -817,6 +883,18 @@ export async function updatePurchaseSuggestionStatus(
   dismissedNote?: string
 ) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT ps.*, si.name AS item_name, a.alias AS primary_sku, cat.code AS category_code
+     FROM purchase_suggestions ps
+     JOIN stock_items si ON si.id = ps.stock_item_id
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE ps.id = $1`,
+    [id]
+  );
+
   const { rows } = await pool.query(
     `UPDATE purchase_suggestions SET
        status = $2::purchase_suggestion_status,
@@ -828,11 +906,64 @@ export async function updatePurchaseSuggestionStatus(
      RETURNING *`,
     [id, status, userId ?? null, dismissedNote ?? null]
   );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (row && before[0]) {
+    const label = before[0].primary_sku ?? before[0].item_name;
+    if (status === 'approved') {
+      await recordAuditEvent(pool, {
+        companyId: row.company_id,
+        entityType: 'purchase_suggestion',
+        entityId: id,
+        action: 'suggestion.approved',
+        actorId: userId,
+        summary: `Approved reorder for ${label}`,
+        recordLabel: before[0].primary_sku ? `SKU ${before[0].primary_sku}` : null,
+        source: 'api',
+        changes: [{ field: 'status', old: before[0].status, new: 'approved' }],
+        metadata: {
+          itemName: before[0].item_name,
+          primarySku: before[0].primary_sku,
+          vendorSlug: String(before[0].category_code ?? '').toLowerCase() || null,
+          suggestedQty: Number(row.suggested_qty),
+        },
+      });
+    } else if (status === 'cancelled') {
+      await recordAuditEvent(pool, {
+        companyId: row.company_id,
+        entityType: 'purchase_suggestion',
+        entityId: id,
+        action: 'suggestion.dismissed',
+        actorId: userId,
+        summary: `Dismissed reorder for ${label}`,
+        recordLabel: before[0].primary_sku ? `SKU ${before[0].primary_sku}` : null,
+        source: 'api',
+        changes: [{ field: 'status', old: before[0].status, new: 'cancelled' }],
+        metadata: {
+          itemName: before[0].item_name,
+          primarySku: before[0].primary_sku,
+          vendorSlug: String(before[0].category_code ?? '').toLowerCase() || null,
+          note: dismissedNote ?? row.dismissed_note,
+        },
+      });
+    }
+  }
+  return row ?? null;
 }
 
-export async function updateSuggestionQty(id: string, qty: number) {
+export async function updateSuggestionQty(id: string, qty: number, userId?: string) {
   const pool = getPool();
+  const { rows: before } = await pool.query(
+    `SELECT ps.*, si.name AS item_name, a.alias AS primary_sku, cat.code AS category_code
+     FROM purchase_suggestions ps
+     JOIN stock_items si ON si.id = ps.stock_item_id
+     JOIN stock_categories cat ON cat.id = si.category_id
+     LEFT JOIN LATERAL (
+       SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+     ) a ON true
+     WHERE ps.id = $1`,
+    [id]
+  );
+
   const { rows } = await pool.query(
     `UPDATE purchase_suggestions SET
        user_adjusted_qty = $2,
@@ -843,7 +974,31 @@ export async function updateSuggestionQty(id: string, qty: number) {
      RETURNING *`,
     [id, qty]
   );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (row && before[0]) {
+    const prevQty = Number(before[0].user_adjusted_qty ?? before[0].suggested_qty);
+    if (prevQty !== qty) {
+      await recordAuditEvent(pool, {
+        companyId: row.company_id,
+        entityType: 'purchase_suggestion',
+        entityId: id,
+        action: 'suggestion.qty_changed',
+        actorId: userId,
+        summary: `Qty changed for ${before[0].primary_sku ?? before[0].item_name}: ${prevQty} → ${qty}`,
+        recordLabel: before[0].primary_sku ? `SKU ${before[0].primary_sku}` : null,
+        source: 'api',
+        changes: [{ field: 'suggested_qty', old: prevQty, new: qty }],
+        metadata: {
+          itemName: before[0].item_name,
+          primarySku: before[0].primary_sku,
+          vendorSlug: String(before[0].category_code ?? '').toLowerCase() || null,
+          fromQty: prevQty,
+          toQty: qty,
+        },
+      });
+    }
+  }
+  return row ?? null;
 }
 
 export async function bulkUpdateSuggestionStatus(
@@ -859,9 +1014,61 @@ export async function bulkUpdateSuggestionStatus(
        approved_at = CASE WHEN $2 = 'approved' THEN now() ELSE approved_at END,
        approved_by = CASE WHEN $2 = 'approved' THEN $3::uuid ELSE approved_by END
      WHERE id = ANY($1::uuid[]) AND status = 'draft'
-     RETURNING id`,
+     RETURNING id, company_id`,
     [ids, status, userId ?? null]
   );
+
+  if (rows.length > 0 && status === 'approved') {
+    await recordAuditEvent(pool, {
+      companyId: rows[0].company_id,
+      entityType: 'purchase_suggestion',
+      entityId: rows[0].id,
+      action: 'suggestion.bulk_approved',
+      actorId: userId,
+      summary: `Bulk approved ${rows.length} reorder line(s)`,
+      recordLabel: `Bulk approve ×${rows.length}`,
+      correlationId: newCorrelationId(),
+      source: 'api',
+      changes: [{ field: 'status', old: 'draft', new: 'approved' }],
+      metadata: { ids: rows.map((r) => r.id), count: rows.length },
+    });
+  }
+
+  return rows.length;
+}
+
+export async function bulkDismissSuggestions(
+  ids: string[],
+  userId?: string,
+  note?: string
+) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `UPDATE purchase_suggestions SET
+       status = 'cancelled'::purchase_suggestion_status,
+       updated_at = now(),
+       dismissed_note = COALESCE($3, dismissed_note)
+     WHERE id = ANY($1::uuid[]) AND status = 'draft'
+     RETURNING id, company_id`,
+    [ids, userId ?? null, note ?? 'Dismissed']
+  );
+
+  if (rows.length > 0) {
+    await recordAuditEvent(pool, {
+      companyId: rows[0].company_id,
+      entityType: 'purchase_suggestion',
+      entityId: rows[0].id,
+      action: 'suggestion.bulk_dismissed',
+      actorId: userId,
+      summary: `Bulk dismissed ${rows.length} reorder line(s)`,
+      recordLabel: `Bulk dismiss ×${rows.length}`,
+      correlationId: newCorrelationId(),
+      source: 'api',
+      changes: [{ field: 'status', old: 'draft', new: 'cancelled' }],
+      metadata: { ids: rows.map((r) => r.id), count: rows.length, note: note ?? 'Dismissed' },
+    });
+  }
+
   return rows.length;
 }
 

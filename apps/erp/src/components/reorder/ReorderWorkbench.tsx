@@ -368,6 +368,9 @@ export function ReorderWorkbench({
                           <th className="px-4 py-2 text-right">Min</th>
                           <th className="px-4 py-2 text-right">Suggest</th>
                           <th className="px-4 py-2 text-right">Est. value</th>
+                          {(tab === 'approved' || tab === 'history') && (
+                            <th className="px-4 py-2">Approved by</th>
+                          )}
                           <th className="px-4 py-2">Actions</th>
                         </tr>
                       </thead>
@@ -407,6 +410,16 @@ export function ReorderWorkbench({
                               <td className="px-4 py-2 text-right font-mono">
                                 {formatLkr(line.estimated_value)}
                               </td>
+                              {(tab === 'approved' || tab === 'history') && (
+                                <td className="px-4 py-2 text-xs text-slate-600">
+                                  {line.approved_by_email ?? '—'}
+                                  {line.approved_at && (
+                                    <span className="block text-[10px] text-slate-400">
+                                      {new Date(line.approved_at).toLocaleDateString('en-GB')}
+                                    </span>
+                                  )}
+                                </td>
+                              )}
                               <td className="px-4 py-2">
                                 <ReorderLineActions line={line} tab={tab} />
                               </td>

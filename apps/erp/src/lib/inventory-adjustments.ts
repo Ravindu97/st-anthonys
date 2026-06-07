@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { recordAuditEvent, type AuditChange, type AuditSource } from './audit';
 import { getPool } from './db';
 import { resolveVendorCode } from './inventory-search';
 import { recordStockMovement } from './stock-movements';
@@ -16,7 +17,7 @@ export type PatchUnitBalanceInput = {
 export async function patchUnitBalance(
   vendorSlug: string,
   stockItemId: string,
-  input: PatchUnitBalanceInput
+  input: PatchUnitBalanceInput & { actorId?: string; source?: AuditSource }
 ) {
   const vendor = await resolveVendorCode(vendorSlug);
   if (!vendor) {
@@ -42,9 +43,12 @@ export async function patchUnitBalance(
     await client.query('BEGIN');
 
     const { rows: items } = await client.query(
-      `SELECT si.id
+      `SELECT si.id, si.name AS item_name, a.alias AS primary_sku
        FROM stock_items si
        JOIN stock_categories cat ON cat.id = si.category_id
+       LEFT JOIN LATERAL (
+         SELECT alias FROM stock_item_aliases WHERE item_id = si.id AND is_primary = true LIMIT 1
+       ) a ON true
        WHERE si.id = $1::uuid AND cat.code = $2`,
       [stockItemId, vendor.code]
     );
@@ -144,6 +148,38 @@ export async function patchUnitBalance(
     const prevQty = prev.quantity != null ? Number(prev.quantity) : 0;
     const newQty = quantity != null ? Number(quantity) : 0;
     const qtyDelta = newQty - prevQty;
+    const changes: AuditChange[] = [];
+    if (input.quantity !== undefined && String(prev.quantity) !== String(quantity)) {
+      changes.push({ field: 'quantity', old: prev.quantity, new: quantity });
+    }
+    if (input.rate !== undefined && String(prev.rate) !== String(rate)) {
+      changes.push({ field: 'rate', old: prev.rate, new: rate });
+    }
+    if (input.value !== undefined && String(prev.value) !== String(value)) {
+      changes.push({ field: 'value', old: prev.value, new: value });
+    }
+
+    const sku = items[0].primary_sku ?? items[0].item_name;
+    await recordAuditEvent(client, {
+      companyId,
+      entityType: 'inventory_adjustment',
+      entityId: adj[0].id,
+      action: 'adjustment.created',
+      actorId: input.actorId,
+      summary: `Adjusted ${sku}: ${changes.map((c) => `${c.field} ${formatVal(c.old)}→${formatVal(c.new)}`).join(', ') || 'balance updated'}`,
+      recordLabel: sku ? `SKU ${sku}` : null,
+      source: input.source ?? 'api',
+      changes,
+      metadata: {
+        stockItemId,
+        primarySku: items[0].primary_sku,
+        itemName: items[0].item_name,
+        vendorSlug,
+        vendorCode: vendor.code,
+        note: input.note ?? null,
+      },
+    });
+
     if (qtyDelta !== 0) {
       await recordStockMovement(client, {
         companyId,
@@ -178,6 +214,11 @@ export async function patchUnitBalance(
   } finally {
     client.release();
   }
+}
+
+function formatVal(v: unknown): string {
+  if (v == null) return '—';
+  return String(v);
 }
 
 async function latestSnapshot(client: PoolClient, categoryCode: string) {

@@ -29,7 +29,11 @@ export async function PATCH(
   }
 
   try {
-    const result = await patchUnitBalance(vendor, stockItemId, body);
+    const result = await patchUnitBalance(vendor, stockItemId, {
+      ...body,
+      actorId: auth.user.id !== 'api-key' ? auth.user.id : undefined,
+      source: 'api',
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }

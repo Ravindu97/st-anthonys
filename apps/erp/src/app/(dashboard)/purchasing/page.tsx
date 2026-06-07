@@ -46,6 +46,7 @@ export default async function PurchasingPage() {
               <th className="px-4 py-3">PO #</th>
               <th className="px-4 py-3">Supplier</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Created by</th>
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3 text-right">Lines</th>
             </tr>
@@ -63,6 +64,9 @@ export default async function PurchasingPage() {
                 </td>
                 <td className="px-4 py-2">{o.supplier_name}</td>
                 <td className="px-4 py-2 capitalize">{o.status}</td>
+                <td className="px-4 py-2 text-xs text-slate-600">
+                  {o.created_by_email ?? '—'}
+                </td>
                 <td className="px-4 py-2 text-right font-mono">
                   {Number(o.total_amount).toLocaleString()}
                 </td>

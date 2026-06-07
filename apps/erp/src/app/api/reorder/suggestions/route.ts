@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
 import { getDefaultCompanyId } from '@/lib/company';
 import {
+  bulkDismissSuggestions,
   bulkUpdateSuggestionStatus,
   createSuggestionForItem,
   getLocationIdForItemCategory,
@@ -71,16 +72,12 @@ export async function POST(request: Request) {
   }
 
   if (body.action === 'bulk_dismiss' && Array.isArray(body.ids)) {
-    let count = 0;
-    for (const id of body.ids) {
-      await updatePurchaseSuggestionStatus(id, 'cancelled', userId, body.note ?? 'Dismissed');
-      count++;
-    }
+    const count = await bulkDismissSuggestions(body.ids, userId, body.note ?? 'Dismissed');
     return NextResponse.json({ updated: count });
   }
 
   if (body.action === 'revert_to_draft' && body.id) {
-    const updated = await revertSuggestionToDraft(body.id);
+    const updated = await revertSuggestionToDraft(body.id, userId);
     if (!updated) {
       return NextResponse.json({ error: 'Not found or not approved' }, { status: 400 });
     }
@@ -88,7 +85,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === 'update_qty' && body.id != null && body.qty != null) {
-    const updated = await updateSuggestionQty(body.id, Number(body.qty));
+    const updated = await updateSuggestionQty(body.id, Number(body.qty), userId);
     return NextResponse.json({ suggestion: updated });
   }
 

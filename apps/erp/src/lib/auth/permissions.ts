@@ -17,7 +17,8 @@ export type Permission =
   | 'purchasing:write'
   | 'pos:read'
   | 'pos:write'
-  | 'analytics:read';
+  | 'analytics:read'
+  | 'audit:read';
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: [
@@ -38,6 +39,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'pos:read',
     'pos:write',
     'analytics:read',
+    'audit:read',
   ],
   viewer: [
     'inventory:read',

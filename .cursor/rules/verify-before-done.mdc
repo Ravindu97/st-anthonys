@@ -1,0 +1,29 @@
+---
+description: Require testing and verification before marking implementation work complete
+alwaysApply: true
+---
+
+# Verify before done
+
+Do not tell the user that work is complete until you have verified the change yourself.
+
+## Required checks (run what applies)
+
+1. **Typecheck** — `cd apps/erp && npx tsc --noEmit` for TypeScript changes.
+2. **Build or page load** — For UI/routes, confirm the page renders (dev server or `next build`); fix runtime errors such as server/client boundary violations.
+3. **Migrations** — Run `npm run db:migrate` when SQL migrations were added.
+4. **Lint** — Fix new linter errors in files you edited.
+5. **User flows** — For UI features, click through links, forms, and navigation (e.g. audit workflow → PO detail), not only the landing page.
+6. **SQL** — Cast UUID parameters as `$n::uuid` when comparing to UUID columns.
+
+## Next.js server vs client
+
+- **Never** import `@/lib/db`, `@/lib/audit` (server), or `pg` from `'use client'` components.
+- Put shared types, constants, and pure helpers in `@/lib/audit-shared.ts` (or similar `*-shared` modules).
+- Do not export utility functions from client component files if server pages need them — use shared modules instead.
+- Only add `'use client'` when the file uses hooks, browser APIs, or event handlers that require it.
+
+## Before saying "done"
+
+- Summarize what you tested (commands run, URLs checked).
+- If something could not be tested (e.g. needs login), say so explicitly and what the user should verify.

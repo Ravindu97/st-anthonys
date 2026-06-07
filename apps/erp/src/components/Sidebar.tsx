@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { Role } from '@/lib/auth/permissions';
+import { isAdminRole } from '@/lib/auth/permissions';
 
 const nav = [
   { href: '/', label: 'Dashboard', short: 'Home', icon: HomeIcon },
@@ -16,15 +18,23 @@ const nav = [
   { href: '/analytics', label: 'Analytics', short: 'BI', icon: ChartIcon },
 ] as const;
 
+const adminNav = [
+  { href: '/import', label: 'Tally import', short: 'Import', icon: ImportIcon },
+  { href: '/admin/audit', label: 'Activity log', short: 'Audit', icon: AuditIcon },
+] as const;
+
 type SidebarProps = {
   collapsed: boolean;
   mobileOpen: boolean;
   onCloseMobile: () => void;
   onToggleCollapse: () => void;
+  userRole?: Role;
 };
 
 function isNavItemActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/';
+  if (href === '/admin/audit') return pathname.startsWith('/admin/audit');
+  if (href === '/import') return pathname.startsWith('/import');
   if (href === '/inventory/alerts') return pathname.startsWith('/inventory/alerts');
   if (href === '/inventory/reorder') return pathname.startsWith('/inventory/reorder');
   if (href === '/inventory') {
@@ -43,9 +53,11 @@ export function Sidebar({
   mobileOpen,
   onCloseMobile,
   onToggleCollapse,
+  userRole,
 }: SidebarProps) {
   const pathname = usePathname();
   const showLabels = !collapsed || mobileOpen;
+  const showAdmin = userRole ? isAdminRole(userRole) : false;
 
   return (
     <aside
@@ -118,6 +130,38 @@ export function Sidebar({
             );
           })}
         </div>
+
+        {showAdmin && (
+          <div className="mt-4 border-t border-brand-blue-700 pt-3">
+            {showLabels && (
+              <p className="mb-2 px-3 font-mono text-[10px] tracking-widest text-slate-500 uppercase">
+                Admin
+              </p>
+            )}
+            <div className="space-y-1">
+              {adminNav.map((item) => {
+                const active = isNavItemActive(pathname, item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={collapsed && !mobileOpen ? item.label : undefined}
+                    onClick={onCloseMobile}
+                    className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-brand-blue-500 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    } ${!showLabels ? 'justify-center px-2' : ''}`}
+                  >
+                    <Icon className="h-5 w-5 shrink-0 opacity-90" />
+                    {showLabels && <span className="truncate">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
       <div
@@ -245,6 +289,22 @@ function ChartIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m6 0h6m-6 0H7m8-10v10m0-10a2 2 0 012-2h2a2 2 0 012 2v10" />
+    </svg>
+  );
+}
+
+function ImportIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+    </svg>
+  );
+}
+
+function AuditIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }

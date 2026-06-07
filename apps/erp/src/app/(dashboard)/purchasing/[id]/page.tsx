@@ -1,9 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { EntityActivityPanel } from '@/components/audit/EntityActivityPanel';
 import { PurchaseOrderDocument } from '@/components/purchasing/PurchaseOrderDocument';
 import { PrintPoButton } from '@/components/purchasing/PrintPoButton';
 import { ReceiveGoodsForm } from '@/components/purchasing/ReceiveGoodsForm';
+import { getPurchaseOrderAttribution, getRecordAuditStory } from '@/lib/audit';
+import { isAdminRole } from '@/lib/auth/permissions';
+import { getSessionFromCookies } from '@/lib/auth/session';
 import { getCompanyProfile } from '@/lib/company-profile';
 import { getPurchaseOrderDocument } from '@/lib/purchasing';
 
@@ -20,6 +24,10 @@ export default async function PurchaseOrderDetailPage({
 
   const company = await getCompanyProfile(document.order.company_id);
   const { order, lines } = document;
+  const session = await getSessionFromCookies();
+  const isAdmin = session ? isAdminRole(session.role) : false;
+  const attribution = await getPurchaseOrderAttribution(id);
+  const auditEvents = isAdmin ? await getRecordAuditStory('purchase_order', id) : [];
 
   return (
     <div className="space-y-6">
@@ -51,7 +59,16 @@ export default async function PurchaseOrderDetailPage({
         </div>
       </div>
 
-      <PurchaseOrderDocument document={document} company={company} />
+      <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
+        <PurchaseOrderDocument document={document} company={company} />
+        {attribution && (
+          <EntityActivityPanel
+            attribution={attribution}
+            auditEvents={auditEvents}
+            showFullHistory={isAdmin}
+          />
+        )}
+      </div>
 
       {order.status !== 'received' && (
         <div className="no-print">
