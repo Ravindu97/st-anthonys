@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 import { listPurchaseOrders, listSuppliers } from '@/lib/purchasing';
 
 export const dynamic = 'force-dynamic';
@@ -7,12 +8,15 @@ export const dynamic = 'force-dynamic';
 export default async function PurchasingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const awaitingOnly = params.filter === 'awaiting';
+  const page = Math.max(1, Number(params.page ?? 1));
+  const queryBase = { filter: awaitingOnly ? 'awaiting' : undefined };
+
   const [orders, suppliers] = await Promise.all([
-    listPurchaseOrders({ awaitingReceipt: awaitingOnly }),
+    listPurchaseOrders({ awaitingReceipt: awaitingOnly, page, pageSize: 25 }),
     listSuppliers(),
   ]);
 
@@ -136,6 +140,13 @@ export default async function PurchasingPage({
             )}
           </p>
         )}
+        <TablePagination
+          basePath="/purchasing"
+          page={orders.page}
+          pageSize={orders.pageSize}
+          totalCount={orders.totalCount}
+          searchParams={queryBase}
+        />
       </div>
 
       <p className="text-xs text-slate-500">

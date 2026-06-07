@@ -7,7 +7,8 @@ export type AuditEntityType =
   | 'reorder_scan'
   | 'import_run'
   | 'inventory_adjustment'
-  | 'stock_item';
+  | 'stock_item'
+  | 'pos_transaction';
 
 export type AuditSource = 'web' | 'api' | 'system';
 
@@ -71,6 +72,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'import.completed': 'Import completed',
   'import.dry_run': 'Import preview',
   'adjustment.created': 'Balance adjusted',
+  'pos.sale_completed': 'POS sale completed',
 };
 
 export const AUDIT_PRESETS: { id: AuditPreset; label: string }[] = [
@@ -145,6 +147,9 @@ export function resolveAuditRecordHref(event: AuditEvent): string | null {
   }
   if (event.entity_type === 'purchase_suggestion') {
     return '/inventory/reorder?tab=history';
+  }
+  if (event.entity_type === 'pos_transaction') {
+    return `/orders/pos/${event.entity_id}`;
   }
   return null;
 }

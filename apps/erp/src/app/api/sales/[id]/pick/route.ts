@@ -24,10 +24,18 @@ export async function POST(
   }
 
   if (body.action === 'mark_collected') {
+    const payment =
+      body.paymentMethod && body.paymentReference
+        ? {
+            method: body.paymentMethod as 'cash' | 'card' | 'account',
+            reference: String(body.paymentReference),
+          }
+        : undefined;
     const doc = await updateSalesStatus(
       id,
       'collected',
-      auth.user.id !== 'api-key' ? auth.user.id : undefined
+      auth.user.id !== 'api-key' ? auth.user.id : undefined,
+      payment
     );
     return NextResponse.json({ document: doc });
   }

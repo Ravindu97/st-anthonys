@@ -1,23 +1,33 @@
 import { NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/auth';
-import { lookupPosItems } from '@/lib/pos';
+import { browsePosItems, listPosBrowseVendors } from '@/lib/pos';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const { requirePermission } = await import('@/lib/auth');
   const auth = await requirePermission(request, 'pos:read');
   if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get('q');
   const locationId = searchParams.get('locationId');
-  if (!q?.trim()) return NextResponse.json({ items: [] });
   if (!locationId) {
     return NextResponse.json({ error: 'locationId required' }, { status: 400 });
   }
-  const items = await lookupPosItems(q, {
+
+  if (searchParams.get('vendors') === '1') {
+    const vendors = await listPosBrowseVendors();
+    return NextResponse.json({ vendors });
+  }
+
+  const result = await browsePosItems({
     locationId,
     priceLevelId: searchParams.get('priceLevelId'),
     customerId: searchParams.get('customerId') ?? undefined,
+    vendorCode: searchParams.get('vendorCode') ?? undefined,
+    q: searchParams.get('q') ?? undefined,
+    page: Number(searchParams.get('page') ?? 1),
+    pageSize: Number(searchParams.get('pageSize') ?? 25),
   });
-  return NextResponse.json({ items });
+
+  return NextResponse.json(result);
 }

@@ -53,20 +53,6 @@ export function PickListClient({
     }
   }
 
-  async function markCollected() {
-    setLoading(true);
-    try {
-      await fetch(`/api/sales/${orderId}/pick`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark_collected' }),
-      });
-      router.push(`/orders/${orderId}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="space-y-4">
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
@@ -108,14 +94,9 @@ export function PickListClient({
           </button>
         )}
         {status === 'ready_for_pickup' && (
-          <button
-            type="button"
-            disabled={loading}
-            onClick={markCollected}
-            className="rounded-lg bg-brand-gold-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            Mark collected
-          </button>
+          <p className="text-sm text-slate-500">
+            Use the payment panel below when the customer collects.
+          </p>
         )}
       </div>
     </div>

@@ -9,6 +9,9 @@ export async function GET(request: Request) {
   const auth = await requirePermission(request, 'pricing:read');
   if (auth instanceof NextResponse) return auth;
   const companyId = await getDefaultCompanyId();
-  const lists = await listPriceLists(companyId);
-  return NextResponse.json({ lists });
+  const { searchParams } = new URL(request.url);
+  const result = await listPriceLists(companyId, {
+    page: parseInt(searchParams.get('page') ?? '1', 10),
+  });
+  return NextResponse.json({ lists: result.items, ...result });
 }

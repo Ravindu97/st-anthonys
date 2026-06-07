@@ -2,21 +2,27 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { Role } from '@/lib/auth/permissions';
-import { isAdminRole } from '@/lib/auth/permissions';
+import type { Permission, Role } from '@/lib/auth/permissions';
+import { hasPermission, isAdminRole } from '@/lib/auth/permissions';
 
-const nav = [
+const nav: Array<{
+  href: string;
+  label: string;
+  short: string;
+  icon: typeof HomeIcon;
+  permission?: Permission;
+}> = [
   { href: '/', label: 'Dashboard', short: 'Home', icon: HomeIcon },
   { href: '/inventory', label: 'Inventory hub', short: 'Stock', icon: BoxesIcon },
   { href: '/inventory/alerts', label: 'Alert center', short: 'Alerts', icon: AlertIcon },
   { href: '/inventory/reorder', label: 'Reorder', short: 'Reorder', icon: ReorderIcon },
   { href: '/pricing', label: 'Pricing', short: 'Price', icon: TagIcon },
   { href: '/customers', label: 'Customers', short: 'CRM', icon: UsersIcon },
-  { href: '/orders', label: 'Orders', short: 'Orders', icon: OrdersIcon },
+  { href: '/orders', label: 'Sales', short: 'Sales', icon: OrdersIcon },
   { href: '/purchasing', label: 'Purchasing', short: 'PO', icon: TruckIcon },
-  { href: '/pos', label: 'POS counter', short: 'POS', icon: PosIcon },
+  { href: '/pos', label: 'POS counter', short: 'POS', icon: PosIcon, permission: 'pos:read' },
   { href: '/analytics', label: 'Analytics', short: 'BI', icon: ChartIcon },
-] as const;
+];
 
 const adminNav = [
   { href: '/import', label: 'Tally import', short: 'Import', icon: ImportIcon },
@@ -58,6 +64,9 @@ export function Sidebar({
   const pathname = usePathname();
   const showLabels = !collapsed || mobileOpen;
   const showAdmin = userRole ? isAdminRole(userRole) : false;
+  const visibleNav = nav.filter(
+    (item) => !item.permission || (userRole && hasPermission(userRole, item.permission))
+  );
 
   return (
     <aside
@@ -97,7 +106,7 @@ export function Sidebar({
 
       <nav className="flex-1 overflow-y-auto p-2">
         <div className="space-y-1">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active = isNavItemActive(pathname, item.href);
             const Icon = item.icon;
             return (

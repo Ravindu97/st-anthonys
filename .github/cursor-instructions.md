@@ -42,6 +42,8 @@ Loading a page once is not enough. Exercise the full user path:
 | Purchasing / GRN | Create PO from reorder → **Receive goods** (partial then complete) → confirm PO status, `/purchasing/receipts` list, GRN print, inventory unit ledger shows `GRN GRN-xxxxx`. |
 | Purchasing list | **Awaiting receipt** filter, receipt progress column, `#receive` anchor on partial POs. |
 | Reorder | Search, paginate, create PO from selection, success modal with receive CTA, history tab PO/receipt badge. |
+| POS counter | Open session → search SKU → attach customer → reprice cart → **mock payment gateway** (card tap / cash tender / account charge) → complete sale → insufficient-stock confirm → View sale / Print receipt → Z-report → close session. |
+| Sales hub (`/orders`) | **Counter (POS)** tab lists TXN rows → print receipt; **Quotes** → create/print; SO workflow: confirm → pick → **mock payment on collect** (cash/card/account) → collected; search/date filters. |
 
 If auth blocks automated checks, run the query/API path directly (e.g. call the lib function against the dev DB) and tell the user what to click to confirm in the browser.
 
@@ -57,6 +59,7 @@ If auth blocks automated checks, run the query/API path directly (e.g. call the 
 - Client-safe shared code: `*-shared.ts` modules with no Node/database imports.
 - Admin routes: `/admin/*` and `/api/admin/*` are admin-only (see `middleware.ts`).
 - GRN posts to latest `inventory_snapshots` balance + `stock_movements` (`purchase_receipt`); strict block on over-receipt.
+- POS uses `resolveItemPrice` per register/customer price level; sales post `stock_movements` (`sale`); `/pos` requires `pos:read`.
 
 ## Reporting completion
 

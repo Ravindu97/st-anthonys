@@ -1,14 +1,21 @@
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 import { PriceListImportForm } from '@/components/pricing/PriceListImportForm';
 import { listPriceLevels, listPriceLists } from '@/lib/pricing';
 import { getDefaultCompanyId } from '@/lib/company';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const params = await searchParams;
+  const page = Math.max(1, Number(params.page ?? 1));
   const companyId = await getDefaultCompanyId();
   const [lists, levels] = await Promise.all([
-    listPriceLists(companyId),
+    listPriceLists(companyId, { page, pageSize: 25 }),
     listPriceLevels(companyId),
   ]);
 
@@ -50,7 +57,7 @@ export default async function PricingPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {lists.map((pl) => (
+            {lists.items.map((pl) => (
               <tr key={pl.id}>
                 <td className="px-4 py-2">{pl.price_level_name}</td>
                 <td className="px-4 py-2 text-slate-600">
@@ -62,9 +69,15 @@ export default async function PricingPage() {
             ))}
           </tbody>
         </table>
-        {lists.length === 0 && (
+        {lists.items.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-500">No price lists yet. Import a CSV.</p>
         )}
+        <TablePagination
+          basePath="/pricing"
+          page={lists.page}
+          pageSize={lists.pageSize}
+          totalCount={lists.totalCount}
+        />
       </div>
     </div>
   );

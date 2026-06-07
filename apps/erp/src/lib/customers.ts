@@ -14,8 +14,16 @@ export type Customer = {
   is_active: boolean;
 };
 
-export async function listCustomers(opts?: { q?: string; activeOnly?: boolean }) {
+export async function listCustomers(opts?: {
+  q?: string;
+  activeOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+}) {
   const pool = getPool();
+  const page = Math.max(1, opts?.page ?? 1);
+  const pageSize = Math.min(100, Math.max(25, opts?.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
   const values: unknown[] = [];
   let where = 'WHERE 1=1';
   if (opts?.activeOnly !== false) {
@@ -25,18 +33,24 @@ export async function listCustomers(opts?: { q?: string; activeOnly?: boolean })
     values.push(`%${opts.q.trim()}%`);
     where += ` AND (c.name ILIKE $${values.length} OR c.code ILIKE $${values.length})`;
   }
+  values.push(pageSize, offset);
 
   const { rows } = await pool.query(
     `SELECT
        c.*,
-       pl.name AS price_level_name
+       pl.name AS price_level_name,
+       COUNT(*) OVER()::int AS total_count
      FROM customers c
      LEFT JOIN price_levels pl ON pl.id = c.price_level_id
      ${where}
-     ORDER BY c.name`,
+     ORDER BY c.name
+     LIMIT $${values.length - 1} OFFSET $${values.length}`,
     values
   );
-  return rows as Customer[];
+
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const items = rows.map(({ total_count: _, ...row }) => row) as Customer[];
+  return { items, totalCount, page, pageSize };
 }
 
 export async function getCustomer(id: string) {

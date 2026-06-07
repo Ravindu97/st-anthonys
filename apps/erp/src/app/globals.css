@@ -40,10 +40,15 @@
   background: #10b981;
 }
 
-.po-document {
+.po-document,
+.receipt-document {
   background: #fafcf9;
   font-family: var(--font-sans);
   font-size: 13px;
+}
+
+.receipt-document--print {
+  max-width: 80mm;
 }
 
 .po-doc-body {
@@ -81,6 +86,10 @@
   border-bottom: 1px solid #64748b;
 }
 
+.print-only {
+  display: none;
+}
+
 @media print {
   /* Hide app chrome only — not .po-document */
   aside,
@@ -110,14 +119,20 @@
     padding: 0 !important;
   }
 
-  .po-document {
+  .po-document,
+  .receipt-document {
     box-shadow: none !important;
     border-radius: 0 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
+  .print-only {
+    display: block !important;
+  }
+
   .po-document,
+  .receipt-document,
   .po-th,
   .brand-mark-tile--gold,
   .brand-mark-tile--green {

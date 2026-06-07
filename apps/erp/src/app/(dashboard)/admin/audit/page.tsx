@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 import { AuditFilters } from '@/components/audit/AuditFilters';
 import { buildAuditSearchString } from '@/lib/audit-shared';
 import { AuditExportButton } from '@/components/audit/AuditExportButton';
@@ -87,17 +87,17 @@ export default async function AdminAuditPage({
   ]);
 
   const data = view === 'workflows' ? workflowData! : eventData!;
-  const totalPages = Math.max(1, Math.ceil(data.totalCount / data.pageSize));
   const exportSearch = buildAuditSearchString(params);
-
-  function auditUrl(overrides: Record<string, string | undefined>) {
-    const next = new URLSearchParams();
-    const merged = { ...params, page: String(page), view, ...overrides };
-    for (const [k, v] of Object.entries(merged)) {
-      if (v) next.set(k, v);
-    }
-    return `/admin/audit?${next.toString()}`;
-  }
+  const paginationParams = {
+    q: params.q,
+    entityType: params.entityType,
+    action: params.action,
+    from: params.from,
+    to: params.to,
+    view,
+    userId: params.userId,
+    preset: params.preset,
+  };
 
   return (
     <div className="space-y-6">
@@ -124,34 +124,6 @@ export default async function AdminAuditPage({
 
       <AuditFilters users={users} params={{ ...params, view }} />
 
-      <div className="flex items-center justify-between text-sm text-slate-500">
-        <span>
-          {data.totalCount} {view === 'workflows' ? 'workflow' : 'event'}
-          {data.totalCount === 1 ? '' : 's'}
-        </span>
-        <div className="flex gap-2">
-          {page > 1 && (
-            <Link
-              href={auditUrl({ page: String(page - 1) })}
-              className="text-brand-blue-600 hover:underline"
-            >
-              ← Previous
-            </Link>
-          )}
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          {page < totalPages && (
-            <Link
-              href={auditUrl({ page: String(page + 1) })}
-              className="text-brand-blue-600 hover:underline"
-            >
-              Next →
-            </Link>
-          )}
-        </div>
-      </div>
-
       {view === 'workflows' && workflowData ? (
         <div className="space-y-3">
           {workflowData.items.map((workflow) => (
@@ -164,6 +136,16 @@ export default async function AdminAuditPage({
       ) : eventData ? (
         <AuditTimeline events={eventData.items} />
       ) : null}
+
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <TablePagination
+          basePath="/admin/audit"
+          page={data.page}
+          pageSize={data.pageSize}
+          totalCount={data.totalCount}
+          searchParams={paginationParams}
+        />
+      </div>
     </div>
   );
 }

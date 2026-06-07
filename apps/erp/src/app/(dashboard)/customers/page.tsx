@@ -1,11 +1,22 @@
 import Link from 'next/link';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 import { listCustomers } from '@/lib/customers';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CustomersPage() {
-  const customers = await listCustomers();
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; q?: string }>;
+}) {
+  const params = await searchParams;
+  const page = Math.max(1, Number(params.page ?? 1));
+  const result = await listCustomers({
+    page,
+    pageSize: 25,
+    q: params.q,
+  });
 
   return (
     <div className="space-y-6">
@@ -33,7 +44,7 @@ export default async function CustomersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {customers.map((c) => (
+            {result.items.map((c) => (
               <tr key={c.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 font-mono text-xs">{c.code}</td>
                 <td className="px-4 py-2">
@@ -51,11 +62,18 @@ export default async function CustomersPage() {
             ))}
           </tbody>
         </table>
-        {customers.length === 0 && (
+        {result.items.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-500">
             No customers yet. Create via API POST /api/customers
           </p>
         )}
+        <TablePagination
+          basePath="/customers"
+          page={result.page}
+          pageSize={result.pageSize}
+          totalCount={result.totalCount}
+          searchParams={{ q: params.q }}
+        />
       </div>
     </div>
   );

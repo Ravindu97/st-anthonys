@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 import { listGoodsReceipts } from '@/lib/purchasing';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function GoodsReceiptsPage({
 }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1));
-  const data = await listGoodsReceipts({ page, pageSize: 50 });
+  const data = await listGoodsReceipts({ page, pageSize: 25 });
 
   return (
     <div className="space-y-6">
@@ -91,28 +92,13 @@ export default async function GoodsReceiptsPage({
         {data.items.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-500">No goods receipts yet.</p>
         )}
+        <TablePagination
+          basePath="/purchasing/receipts"
+          page={data.page}
+          pageSize={data.pageSize}
+          totalCount={data.totalCount}
+        />
       </div>
-
-      {data.totalCount > data.pageSize && (
-        <div className="flex gap-2 text-sm">
-          {page > 1 && (
-            <Link
-              href={`/purchasing/receipts?page=${page - 1}`}
-              className="text-brand-blue-600 hover:underline"
-            >
-              ← Previous
-            </Link>
-          )}
-          {page * data.pageSize < data.totalCount && (
-            <Link
-              href={`/purchasing/receipts?page=${page + 1}`}
-              className="text-brand-blue-600 hover:underline"
-            >
-              Next →
-            </Link>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -51,6 +51,10 @@ export async function listSalesDocuments(opts?: {
   docKind?: string;
   status?: string;
   customerId?: string;
+  fulfillmentType?: string;
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 }) {
@@ -71,7 +75,24 @@ export async function listSalesDocuments(opts?: {
   }
   if (opts?.customerId) {
     values.push(opts.customerId);
-    where += ` AND sd.customer_id = $${values.length}`;
+    where += ` AND sd.customer_id = $${values.length}::uuid`;
+  }
+  if (opts?.fulfillmentType) {
+    values.push(opts.fulfillmentType);
+    where += ` AND sd.fulfillment_type = $${values.length}::fulfillment_type`;
+  }
+  if (opts?.q?.trim()) {
+    values.push(`%${opts.q.trim()}%`);
+    const i = values.length;
+    where += ` AND (sd.doc_number ILIKE $${i} OR c.name ILIKE $${i})`;
+  }
+  if (opts?.dateFrom) {
+    values.push(opts.dateFrom);
+    where += ` AND sd.created_at >= $${values.length}::date`;
+  }
+  if (opts?.dateTo) {
+    values.push(opts.dateTo);
+    where += ` AND sd.created_at < ($${values.length}::date + interval '1 day')`;
   }
   values.push(pageSize, offset);
 
@@ -99,9 +120,10 @@ export async function listSalesDocuments(opts?: {
 export async function getSalesDocument(id: string) {
   const pool = getPool();
   const { rows: docs } = await pool.query(
-    `SELECT sd.*, c.name AS customer_name, c.code AS customer_code
+    `SELECT sd.*, c.name AS customer_name, c.code AS customer_code, loc.name AS location_name
      FROM sales_documents sd
      LEFT JOIN customers c ON c.id = sd.customer_id
+     LEFT JOIN locations loc ON loc.id = sd.location_id
      WHERE sd.id = $1`,
     [id]
   );
@@ -265,16 +287,21 @@ export async function createSalesDocument(input: {
 export async function updateSalesStatus(
   id: string,
   status: string,
-  userId?: string
+  userId?: string,
+  payment?: { method: 'cash' | 'card' | 'account'; reference: string }
 ) {
   const pool = getPool();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `UPDATE sales_documents SET status = $2::sales_doc_status, updated_at = now()
+      `UPDATE sales_documents SET
+         status = $2::sales_doc_status,
+         updated_at = now(),
+         payment_method = COALESCE($3::payment_method, payment_method),
+         payment_reference = COALESCE($4, payment_reference)
        WHERE id = $1 RETURNING *`,
-      [id, status]
+      [id, status, payment?.method ?? null, payment?.reference ?? null]
     );
     if (rows.length === 0) {
       await client.query('ROLLBACK');
@@ -375,6 +402,17 @@ export async function updatePickProgress(
     [documentId, lineId, pickedQty]
   );
   return rows[0] ?? null;
+}
+
+export async function listFulfillmentLocations() {
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    SELECT loc.id, loc.name, cat.code AS vendor_code
+    FROM locations loc
+    JOIN stock_categories cat ON cat.id = loc.stock_category_id
+    ORDER BY loc.name
+  `);
+  return rows as Array<{ id: string; name: string; vendor_code: string }>;
 }
 
 export async function convertQuoteToOrder(quoteId: string, createdBy?: string) {

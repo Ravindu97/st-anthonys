@@ -9,8 +9,11 @@ export async function GET(request: Request) {
   const auth = await requirePermission(request, 'customers:read');
   if (auth instanceof NextResponse) return auth;
   const { searchParams } = new URL(request.url);
-  const customers = await listCustomers({ q: searchParams.get('q') ?? undefined });
-  return NextResponse.json({ customers });
+  const result = await listCustomers({
+    q: searchParams.get('q') ?? undefined,
+    page: parseInt(searchParams.get('page') ?? '1', 10),
+  });
+  return NextResponse.json({ customers: result.items, ...result });
 }
 
 export async function POST(request: Request) {

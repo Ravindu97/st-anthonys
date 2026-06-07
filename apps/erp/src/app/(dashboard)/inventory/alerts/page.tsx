@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { searchCrossVendorAlerts } from '@/lib/inventory-search';
 import { AlertsTable } from '@/components/inventory/AlertsTable';
-import { PaginationBar } from '@/components/inventory/PaginationBar';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { TablePagination } from '@/components/TablePagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,45 +93,14 @@ export default async function InventoryAlertsPage({
             </a>
           </div>
           <AlertsTable items={result.items} />
-          <AlertsPagination page={page} totalCount={result.totalCount} tab={tab} />
+          <TablePagination
+            basePath="/inventory/alerts"
+            page={page}
+            pageSize={result.pageSize}
+            totalCount={result.totalCount}
+            searchParams={{ tab }}
+          />
         </>
-      )}
-    </div>
-  );
-}
-
-function AlertsPagination({
-  page,
-  totalCount,
-  tab,
-}: {
-  page: number;
-  totalCount: number;
-  tab: string;
-}) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / 50));
-  if (totalPages <= 1) return null;
-
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      {page > 1 && (
-        <Link
-          href={`/inventory/alerts?tab=${tab}&page=${page - 1}`}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
-        >
-          Previous
-        </Link>
-      )}
-      <span className="text-sm text-slate-500">
-        Page {page} of {totalPages}
-      </span>
-      {page < totalPages && (
-        <Link
-          href={`/inventory/alerts?tab=${tab}&page=${page + 1}`}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
-        >
-          Next
-        </Link>
       )}
     </div>
   );

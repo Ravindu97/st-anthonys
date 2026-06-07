@@ -86,6 +86,7 @@ export function AuditFilters({
             <option value="import_run">Imports</option>
             <option value="inventory_adjustment">Adjustments</option>
             <option value="reorder_scan">Reorder scans</option>
+            <option value="pos_transaction">POS sales</option>
           </select>
         </label>
 

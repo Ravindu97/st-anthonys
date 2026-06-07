@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageBreadcrumbs } from '@/components/PageBreadcrumbs';
+import { CollectPaymentPanel } from '@/components/sales/CollectPaymentPanel';
 import { OrderActions } from '@/components/sales/OrderActions';
 import { getSalesDocument } from '@/lib/sales';
 
@@ -20,7 +21,7 @@ export default async function OrderDetailPage({
     <div className="space-y-6">
       <PageBreadcrumbs
         items={[
-          { label: 'Orders', href: '/orders' },
+          { label: 'Sales', href: '/orders' },
           { label: doc.doc_number },
         ]}
       />
@@ -33,14 +34,36 @@ export default async function OrderDetailPage({
           <p className="mt-1 text-sm text-slate-500 capitalize">
             {doc.doc_kind} · {doc.status.replace(/_/g, ' ')} · {doc.fulfillment_type}
           </p>
+          {doc.doc_kind === 'order' && (
+            <p className="mt-1 text-xs text-slate-400">
+              Workflow: confirmed → picking → ready for pickup → collected
+            </p>
+          )}
         </div>
-        <OrderActions
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/orders/${doc.id}/print`}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            {doc.doc_kind === 'quote' ? 'Print quote' : 'Print document'}
+          </Link>
+          <OrderActions
           orderId={doc.id}
           status={doc.status}
           docKind={doc.doc_kind}
           canPick={['confirmed', 'picking', 'ready_for_pickup'].includes(doc.status)}
-        />
+          />
+        </div>
       </header>
+
+      {doc.status === 'ready_for_pickup' && doc.doc_kind === 'order' && (
+        <CollectPaymentPanel
+          orderId={doc.id}
+          totalAmount={Number(doc.total_amount)}
+          customerName={doc.customer_name}
+          customerId={doc.customer_id}
+        />
+      )}
 
       <dl className="grid gap-3 sm:grid-cols-3 text-sm rounded-xl border border-slate-200 bg-white p-4">
         <div>
@@ -55,6 +78,19 @@ export default async function OrderDetailPage({
           <dt className="text-slate-500">Total</dt>
           <dd className="font-mono font-semibold">{Number(doc.total_amount).toLocaleString()}</dd>
         </div>
+        {doc.payment_method && (
+          <div>
+            <dt className="text-slate-500">Payment</dt>
+            <dd className="capitalize">
+              {doc.payment_method}
+              {doc.payment_reference && (
+                <span className="mt-0.5 block font-mono text-xs text-slate-500 normal-case">
+                  {doc.payment_reference}
+                </span>
+              )}
+            </dd>
+          </div>
+        )}
       </dl>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">

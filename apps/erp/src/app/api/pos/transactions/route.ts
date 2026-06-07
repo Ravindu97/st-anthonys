@@ -23,8 +23,19 @@ export async function POST(request: Request) {
     sessionId: body.sessionId,
     customerId: body.customerId,
     paymentMethod: body.paymentMethod ?? 'cash',
+    paymentReference: body.paymentReference,
     lines: body.lines ?? [],
+    allowInsufficientStock: body.allowInsufficientStock === true,
+    actorId: auth.user.id !== 'api-key' ? auth.user.id : undefined,
   });
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        error: result.error,
+        insufficientStock: 'insufficientStock' in result ? result.insufficientStock : undefined,
+      },
+      { status: 400 }
+    );
+  }
   return NextResponse.json(result);
 }

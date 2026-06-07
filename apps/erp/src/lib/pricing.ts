@@ -20,10 +20,17 @@ export type PriceListItemRow = {
   discount_pct: string;
 };
 
-export async function listPriceLists(companyId?: string) {
+export async function listPriceLists(
+  companyId?: string,
+  opts?: { page?: number; pageSize?: number }
+) {
   const pool = getPool();
-  const filter = companyId ? 'WHERE pl.company_id = $1' : '';
-  const params = companyId ? [companyId] : [];
+  const page = Math.max(1, opts?.page ?? 1);
+  const pageSize = Math.min(100, Math.max(25, opts?.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
+  const values: unknown[] = companyId ? [companyId] : [];
+  const filter = companyId ? 'WHERE pl.company_id = $1::uuid' : '';
+  values.push(pageSize, offset);
 
   const { rows } = await pool.query(
     `SELECT
@@ -33,7 +40,8 @@ export async function listPriceLists(companyId?: string) {
        cat.name AS category_name,
        sg.name AS group_name,
        pl.applicable_from,
-       COUNT(pli.id)::int AS item_count
+       COUNT(pli.id)::int AS item_count,
+       COUNT(*) OVER()::int AS total_count
      FROM price_lists pl
      JOIN price_levels pvl ON pvl.id = pl.price_level_id
      LEFT JOIN stock_categories cat ON cat.id = pl.scope_category_id
@@ -41,10 +49,14 @@ export async function listPriceLists(companyId?: string) {
      LEFT JOIN price_list_items pli ON pli.price_list_id = pl.id
      ${filter}
      GROUP BY pl.id, pvl.name, pl.scope_type, cat.name, sg.name, pl.applicable_from
-     ORDER BY pl.applicable_from DESC, pvl.name`,
-    params
+     ORDER BY pl.applicable_from DESC, pvl.name
+     LIMIT $${values.length - 1} OFFSET $${values.length}`,
+    values
   );
-  return rows as PriceListSummary[];
+
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const items = rows.map(({ total_count: _, ...row }) => row) as PriceListSummary[];
+  return { items, totalCount, page, pageSize };
 }
 
 export async function getPriceListItems(priceListId: string) {
