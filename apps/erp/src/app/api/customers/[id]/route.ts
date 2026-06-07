@@ -24,6 +24,17 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const body = await request.json();
-  const customer = await updateCustomer(id, body);
+  const customer = await updateCustomer(id, {
+    name: body.name,
+    customerType: body.customerType,
+    priceLevelId: body.priceLevelId,
+    creditLimit: body.creditLimit,
+    paymentTermsDays: body.paymentTermsDays,
+    email: body.email,
+    phone: body.phone,
+    address: body.address,
+    isActive: body.isActive,
+  });
+  if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({ customer });
 }
