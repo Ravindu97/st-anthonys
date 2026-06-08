@@ -122,6 +122,19 @@ export async function listSalesDocuments(opts?: {
   return { items, totalCount, page, pageSize };
 }
 
+export async function getSalesQueueSummary() {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS open_to_fulfill
+     FROM sales_documents
+     WHERE doc_kind = 'order'
+       AND status IN ('confirmed', 'picking', 'ready_for_pickup')`
+  );
+  return {
+    open_to_fulfill: Number(rows[0]?.open_to_fulfill ?? 0),
+  };
+}
+
 export async function getSalesDocument(id: string) {
   const pool = getPool();
   const { rows: docs } = await pool.query(

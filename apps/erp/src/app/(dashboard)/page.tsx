@@ -1,150 +1,134 @@
 import Link from 'next/link';
-import {
-  getInventoryHubSummary,
-  searchCrossVendorAlerts,
-} from '@/lib/inventory-search';
-import { getReorderWorkbenchSummary } from '@/lib/reorder';
+import { AnalyticsDataTable } from '@/components/analytics/AnalyticsDataTable';
+import { AnalyticsSalesTrend } from '@/components/analytics/AnalyticsSalesTrend';
+import { OperationsAttentionStrip } from '@/components/dashboard/OperationsAttentionStrip';
+import { OperationsKpiStrip } from '@/components/dashboard/OperationsKpiStrip';
+import { OperationsQuickActions } from '@/components/dashboard/OperationsQuickActions';
+import { OperationsVendorRisk } from '@/components/dashboard/OperationsVendorRisk';
+import { getSessionFromCookies, isAdminRole } from '@/lib/auth';
+import { getOperationsDashboard } from '@/lib/dashboard';
 import { formatLkr } from '@/lib/format';
-import { MetricCardCount, MetricCardMoney } from '@/components/MetricCard';
-import { MetricCardCountLink, MetricCardMoneyLink } from '@/components/inventory/MetricCardLink';
-import { DashboardAlertsPanel } from '@/components/inventory/DashboardAlertsPanel';
-import { alertsUrl } from '@/lib/inventory-url';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  let summary: Awaited<ReturnType<typeof getInventoryHubSummary>> | null = null;
-  let reorderSummary: Awaited<ReturnType<typeof getReorderWorkbenchSummary>> | null =
-    null;
-  let newOutsCount = 0;
+  const session = await getSessionFromCookies();
+  const isAdmin = session ? isAdminRole(session.role) : false;
+
+  let data: Awaited<ReturnType<typeof getOperationsDashboard>> | null = null;
   let error: string | null = null;
 
   try {
-    const [hub, newOuts, reorder] = await Promise.all([
-      getInventoryHubSummary(),
-      searchCrossVendorAlerts({ tab: 'new_outs', page: 1, pageSize: 1 }),
-      getReorderWorkbenchSummary(),
-    ]);
-    summary = hub;
-    newOutsCount = newOuts.totalCount;
-    reorderSummary = reorder;
+    data = await getOperationsDashboard();
   } catch (e) {
     error = e instanceof Error ? e.message : 'Database unavailable';
   }
 
-  const topRiskVendor = summary?.vendors
-    ? [...summary.vendors].sort(
-        (a, b) => Number(b.at_risk_value) - Number(a.at_risk_value)
-      )[0]
-    : undefined;
-
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">
-          Operations Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Live inventory from Tally Location Summary imports
-        </p>
-      </div>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">
+            Operations Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Today&apos;s exceptions, sales pulse, and inventory health
+          </p>
+        </div>
+        {isAdmin && (
+          <Link
+            href="/admin/analytics"
+            className="text-sm font-medium text-brand-blue-600 hover:underline"
+          >
+            Full analytics →
+          </Link>
+        )}
+      </header>
 
       {error && (
         <div className="rounded-lg border border-brand-gold-100 bg-brand-gold-50 px-4 py-3 text-sm text-brand-gold-700">
           {error}. Run{' '}
-          <code className="font-mono text-xs">npm run db:setup</code> and imports
-          from the project root.
+          <code className="font-mono text-xs">npm run db:setup</code> and imports from the
+          project root.
         </div>
       )}
 
-      {summary && (
+      {data && (
         <>
-          <DashboardAlertsPanel
-            lowStock={summary.low_stock}
-            outOfStock={summary.out_of_stock}
-            atRiskValue={summary.at_risk_value}
-            atRiskPct={summary.at_risk_pct}
-            varianceCount={summary.variance_count}
-            newOutsCount={newOutsCount}
-            topVendor={
-              topRiskVendor
-                ? {
-                    slug: topRiskVendor.slug,
-                    name: topRiskVendor.name,
-                    at_risk_value: Number(topRiskVendor.at_risk_value),
-                    low_stock: topRiskVendor.low_stock,
-                    out_of_stock: topRiskVendor.out_of_stock,
-                  }
-                : undefined
-            }
-          />
+          <OperationsAttentionStrip attention={data.attention} />
+          <OperationsKpiStrip kpis={data.kpis} />
 
-          <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-6">
-            {reorderSummary && reorderSummary.items_below_min > 0 && (
-              <MetricCardCountLink
-                href="/inventory/reorder?tab=action"
-                label="Need reorder"
-                count={reorderSummary.items_below_min}
-                accent="gold"
-                sub={`${formatLkr(reorderSummary.estimated_value_at_risk)} at risk`}
-                className="h-full"
-              />
-            )}
-            <MetricCardMoney
-              label="Total stock value"
-              amount={summary.total_value}
-              sub={`${summary.vendor_count} active vendors`}
-            />
-            <MetricCardMoneyLink
-              href={alertsUrl()}
-              label="At-risk value"
-              amount={summary.at_risk_value}
-              sub={`${summary.at_risk_pct}% of portfolio`}
-            />
-            <MetricCardCount
-              label="SKU lines"
-              count={summary.sku_count}
-              sub="Across all vendors"
-            />
-            <MetricCardCountLink
-              href={alertsUrl('low')}
-              label="Low stock SKUs"
-              count={summary.low_stock}
-              accent="gold"
-              sub="Under 10 units"
-            />
-            <MetricCardCountLink
-              href={alertsUrl('out')}
-              label="Out of stock"
-              count={summary.out_of_stock}
-              accent="gold"
+          <div className="grid gap-6 lg:grid-cols-2">
+            <AnalyticsSalesTrend points={data.salesTrend} days={7} />
+            <AnalyticsDataTable
+              title="Revenue by channel"
+              subtitle="Last 7 days"
+              href="/orders"
+              columns={[
+                { key: 'channel', header: 'Channel', render: (r) => r.channel },
+                {
+                  key: 'revenue',
+                  header: 'Revenue',
+                  align: 'right',
+                  render: (r) => formatLkr(r.revenue),
+                },
+                {
+                  key: 'orders',
+                  header: 'Orders',
+                  align: 'right',
+                  render: (r) => r.order_count,
+                },
+                {
+                  key: 'share',
+                  header: 'Share',
+                  align: 'right',
+                  render: (r) => `${r.share_pct}%`,
+                },
+              ]}
+              rows={data.channelMix}
+              emptyMessage="No sales in the last 7 days."
             />
           </div>
 
-          <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-slate-900">
-                Inventory hub
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Vendors, insights, and alert center
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/inventory"
-                className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
-              >
-                View vendors
-              </Link>
-              <Link
-                href="/inventory/alerts"
-                className="rounded-lg border border-brand-blue-200 px-4 py-2 text-sm font-medium text-brand-blue-700 hover:bg-brand-blue-50"
-              >
-                Alert center
-              </Link>
-            </div>
-          </section>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <OperationsVendorRisk vendors={data.topVendorRisks} />
+            <AnalyticsDataTable
+              title="Top customers"
+              subtitle="By revenue — last 7 days"
+              href="/customers"
+              columns={[
+                {
+                  key: 'code',
+                  header: 'Code',
+                  render: (r) => (
+                    <Link
+                      href={`/customers/${r.customer_id}`}
+                      className="font-mono text-xs text-brand-blue-600 hover:underline"
+                    >
+                      {r.code}
+                    </Link>
+                  ),
+                },
+                { key: 'name', header: 'Name', render: (r) => r.name },
+                {
+                  key: 'revenue',
+                  header: 'Revenue',
+                  align: 'right',
+                  render: (r) => formatLkr(r.revenue),
+                },
+                {
+                  key: 'orders',
+                  header: 'Orders',
+                  align: 'right',
+                  render: (r) => r.order_count,
+                },
+              ]}
+              rows={data.topCustomers}
+              emptyMessage="No customer-linked sales in the last 7 days."
+            />
+          </div>
+
+          <OperationsQuickActions />
         </>
       )}
     </div>

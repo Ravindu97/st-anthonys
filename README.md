@@ -143,6 +143,7 @@ Adjustments are recorded in `inventory_adjustments`.
 
 | Module | Route | Notes |
 |--------|-------|-------|
+| Operations dashboard | `/` | Exceptions, 7d sales pulse, inventory KPIs, vendor/customer drill-downs |
 | Reorder suggestions | `/inventory/reorder` | Per-item reorder rules; scan below-threshold stock |
 | Pricing | `/pricing` | Price lists + CSV import (`npm run import:price-list`) |
 | Customers | `/customers` | Contractor accounts with tier pricing |

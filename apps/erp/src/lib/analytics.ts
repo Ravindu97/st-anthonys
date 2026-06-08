@@ -31,7 +31,7 @@ export type {
 
 export { healthStatus, revenueChangeLabel } from './analytics-shared';
 
-async function getRevenueWindow(days: number, offsetDays = 0) {
+export async function getRevenueWindow(days: number, offsetDays = 0) {
   const pool = getPool();
   const { rows } = await pool.query(
     `WITH period_window AS (

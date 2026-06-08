@@ -1,14 +1,22 @@
 import { formatLkrAmount } from '@/lib/format';
 import type { SalesTrendPoint } from '@/lib/analytics-shared';
 
-export function AnalyticsSalesTrend({ points }: { points: SalesTrendPoint[] }) {
+export function AnalyticsSalesTrend({
+  points,
+  days = 14,
+}: {
+  points: SalesTrendPoint[];
+  days?: number;
+}) {
   const max = Math.max(...points.map((p) => p.total_revenue), 1);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <header className="mb-4">
         <h2 className="font-display text-sm font-semibold text-slate-900">Sales trend</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Last 14 days — counter vs office orders (LKR)</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Last {days} days — counter vs office orders (LKR)
+        </p>
       </header>
       <div className="flex items-end gap-1.5 overflow-x-auto pb-2" style={{ minHeight: '8rem' }}>
         {points.map((p) => {

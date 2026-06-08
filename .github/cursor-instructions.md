@@ -38,6 +38,7 @@ Loading a page once is not enough. Exercise the full user path:
 
 | Area | Minimum manual or scripted checks |
 |------|-----------------------------------|
+| Operations dashboard | Open `/` — **Needs attention** pills, 8 KPI cards (all clickable), 7d sales trend + channel mix, top vendor risks + top customers, quick actions; admin sees **Full analytics** link to `/admin/analytics`. |
 | Audit log | Open `/admin/audit`, toggle workflows/events, presets (**Sales**, **Customers**, **Pricing**, **POS sales**, **Reorder only**, **Imports**), click **Open record** on PO/SO/TXN/CUST workflows; customer + sales order detail **Activity** panels for admin. Phase 2: POS session open/close, reorder rule save/import, scan `auto_*` suggestions, price list export + import run row. |
 | Admin analytics | Open `/admin/analytics` (admin-only): executive KPIs (30d revenue, inventory, dead stock, below-min), sales trend, channel mix, top customers, category mix, margins (POS+orders), dead stock + fast movers, at-risk customers; drill-down links to orders/inventory/customers. |
 | Purchasing / GRN | Create PO from reorder → **Receive goods** (partial then complete) → confirm PO status, `/purchasing/receipts` list, GRN print, inventory unit ledger shows `GRN GRN-xxxxx`. |
